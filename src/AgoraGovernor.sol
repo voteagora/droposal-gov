@@ -12,15 +12,26 @@ import "openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "openzeppelin-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /// @custom:security-contact kent@voteagora.com
-contract AgoraGovernor is Initializable, GovernorUpgradeable, GovernorSettingsUpgradeable, GovernorCountingSimpleUpgradeable, GovernorVotesUpgradeable, GovernorVotesQuorumFractionUpgradeable, GovernorTimelockControlUpgradeable, OwnableUpgradeable, UUPSUpgradeable {
+contract AgoraGovernor is
+    Initializable,
+    GovernorUpgradeable,
+    GovernorSettingsUpgradeable,
+    GovernorCountingSimpleUpgradeable,
+    GovernorVotesUpgradeable,
+    GovernorVotesQuorumFractionUpgradeable,
+    GovernorTimelockControlUpgradeable,
+    OwnableUpgradeable,
+    UUPSUpgradeable
+{
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
-    function initialize(IVotesUpgradeable _token, TimelockControllerUpgradeable _timelock)
-        initializer public
-    {
+    function initialize(
+        IVotesUpgradeable _token,
+        TimelockControllerUpgradeable _timelock
+    ) public initializer {
         __Governor_init("Agora Governor");
         __GovernorSettings_init(7200 /* 1 day */, 50400 /* 1 week */, 0);
         __GovernorCountingSimple_init();
@@ -31,11 +42,9 @@ contract AgoraGovernor is Initializable, GovernorUpgradeable, GovernorSettingsUp
         __UUPSUpgradeable_init();
     }
 
-    function _authorizeUpgrade(address newImplementation)
-        internal
-        onlyOwner
-        override
-    {}
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override onlyOwner {}
 
     // The following functions are overrides required by Solidity.
 
@@ -57,7 +66,9 @@ contract AgoraGovernor is Initializable, GovernorUpgradeable, GovernorSettingsUp
         return super.votingPeriod();
     }
 
-    function quorum(uint256 blockNumber)
+    function quorum(
+        uint256 blockNumber
+    )
         public
         view
         override(IGovernorUpgradeable, GovernorVotesQuorumFractionUpgradeable)
@@ -66,7 +77,9 @@ contract AgoraGovernor is Initializable, GovernorUpgradeable, GovernorSettingsUp
         return super.quorum(blockNumber);
     }
 
-    function state(uint256 proposalId)
+    function state(
+        uint256 proposalId
+    )
         public
         view
         override(GovernorUpgradeable, GovernorTimelockControlUpgradeable)
@@ -75,11 +88,46 @@ contract AgoraGovernor is Initializable, GovernorUpgradeable, GovernorSettingsUp
         return super.state(proposalId);
     }
 
-    function propose(address[] memory targets, uint256[] memory values, bytes[] memory calldatas, string memory description)
+    function propose(
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        string memory description
+    )
         public
         override(GovernorUpgradeable, IGovernorUpgradeable)
         returns (uint256)
     {
+        return super.propose(targets, values, calldatas, description);
+    }
+
+    function dropose(
+        uint256 tokenId,
+        uint256 pricing,
+        uint256 quantity,
+        address recipient,
+        bytes memory data,
+        string memory description
+    ) public returns (uint256) {
+        // Assuming Zora's main contract address is known and stored as a state variable
+        address zoraMainAddress = 0xabEFBc9fD2F806065b4f3C237d4b59D9A97Bcac7;
+
+        address[] memory targets = new address[](1);
+        targets[0] = zoraMainAddress;
+
+        uint256[] memory values = new uint256[](1);
+        values[0] = 0; // No ether sent to the Zora function
+
+        bytes[] memory calldatas = new bytes[](1);
+        calldatas[0] = abi.encodeWithSignature(
+            "createEdition(uint256,uint256,uint256,address,bytes)",
+            tokenId,
+            pricing,
+            quantity,
+            recipient,
+            data
+        );
+
         return super.propose(targets, values, calldatas, description);
     }
 
@@ -92,14 +140,25 @@ contract AgoraGovernor is Initializable, GovernorUpgradeable, GovernorSettingsUp
         return super.proposalThreshold();
     }
 
-    function _execute(uint256 proposalId, address[] memory targets, uint256[] memory values, bytes[] memory calldatas, bytes32 descriptionHash)
+    function _execute(
+        uint256 proposalId,
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        bytes32 descriptionHash
+    )
         internal
         override(GovernorUpgradeable, GovernorTimelockControlUpgradeable)
     {
         super._execute(proposalId, targets, values, calldatas, descriptionHash);
     }
 
-    function _cancel(address[] memory targets, uint256[] memory values, bytes[] memory calldatas, bytes32 descriptionHash)
+    function _cancel(
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        bytes32 descriptionHash
+    )
         internal
         override(GovernorUpgradeable, GovernorTimelockControlUpgradeable)
         returns (uint256)
@@ -116,7 +175,9 @@ contract AgoraGovernor is Initializable, GovernorUpgradeable, GovernorSettingsUp
         return super._executor();
     }
 
-    function supportsInterface(bytes4 interfaceId)
+    function supportsInterface(
+        bytes4 interfaceId
+    )
         public
         view
         override(GovernorUpgradeable, GovernorTimelockControlUpgradeable)
