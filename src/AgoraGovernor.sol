@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import "openzeppelin-contracts/governance/Governor.sol";
-import "openzeppelin-contracts/governance/GovernorUpgradeable.sol";
-import "openzeppelin-contracts/governance/extensions/GovernorSettings.sol";
-import "openzeppelin-contracts/governance/extensions/GovernorCountingSimpleUpgradeable.sol";
-import "openzeppelin-contracts/governance/extensions/GovernorVotesUpgradeable.sol";
-import "openzeppelin-contracts/governance/extensions/GovernorVotesQuorumFractionUpgradeable.sol";
-import "openzeppelin-contracts/governance/extensions/GovernorTimelockControlUpgradeable.sol";
-import "openzeppelin-contracts/proxy/utils/Initializable.sol";
-import "openzeppelin-contracts/access/OwnableUpgradeable.sol";
-import "openzeppelin-contracts/proxy/utils/UUPSUpgradeable.sol";
+import "openzeppelin-contracts-upgradeable/governance/GovernorUpgradeable.sol";
+import "openzeppelin-contracts-upgradeable/governance/extensions/GovernorSettingsUpgradeable.sol";
+import "openzeppelin-contracts-upgradeable/governance/extensions/GovernorCountingSimpleUpgradeable.sol";
+import "openzeppelin-contracts-upgradeable/governance/extensions/GovernorVotesUpgradeable.sol";
+import "openzeppelin-contracts-upgradeable/governance/extensions/GovernorVotesQuorumFractionUpgradeable.sol";
+import "openzeppelin-contracts-upgradeable/governance/extensions/GovernorTimelockControlUpgradeable.sol";
+import "openzeppelin-contracts-upgradeable/proxy/utils/Initializable.sol";
+import "openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "openzeppelin-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /// @custom:security-contact kent@voteagora.com
 contract AgoraGovernor is Initializable, GovernorUpgradeable, GovernorSettingsUpgradeable, GovernorCountingSimpleUpgradeable, GovernorVotesUpgradeable, GovernorVotesQuorumFractionUpgradeable, GovernorTimelockControlUpgradeable, OwnableUpgradeable, UUPSUpgradeable {
