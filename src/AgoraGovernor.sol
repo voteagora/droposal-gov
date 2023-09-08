@@ -102,34 +102,53 @@ contract AgoraGovernor is
     }
 
     function dropose(
-        uint256 tokenId,
-        uint256 pricing,
-        uint256 quantity,
-        address recipient,
-        bytes memory data,
-        string memory description
+        string memory name,
+        string memory symbol,
+        uint64 editionSize,
+        uint16 royaltyBPS,
+        address payable fundsRecipient,
+        address defaultAdmin,        
+        uint256 saleConfigPrice,
+        uint256 saleConfigDuration,
+        string memory description,
+        string memory animationURI,
+        string memory imageURI
     ) public returns (uint256) {
-        // Assuming Zora's main contract address is known and stored as a state variable
+        
+        // Zora mainnet address
         address zoraMainAddress = 0xabEFBc9fD2F806065b4f3C237d4b59D9A97Bcac7;
+
+        // Constructing Zora SalesConfiguration struct
+        IERC721Drop.SalesConfiguration memory saleConfig = IERC721Drop.SalesConfiguration({
+            price: saleConfigPrice,
+            duration: saleConfigDuration
+        });
 
         address[] memory targets = new address[](1);
         targets[0] = zoraMainAddress;
 
         uint256[] memory values = new uint256[](1);
-        values[0] = 0; // No ether sent to the Zora function
+        values[0] = 0;  // No ether sent to the Zora function
 
         bytes[] memory calldatas = new bytes[](1);
         calldatas[0] = abi.encodeWithSignature(
-            "createEdition(uint256,uint256,uint256,address,bytes)",
-            tokenId,
-            pricing,
-            quantity,
-            recipient,
-            data
+            "createEdition(string,string,uint64,uint16,address,address,IERC721Drop.SalesConfiguration,string,string,string)",
+            name,
+            symbol,
+            editionSize,
+            royaltyBPS,
+            fundsRecipient,
+            defaultAdmin,
+            saleConfig,
+            description,
+            animationURI,
+            imageURI
         );
 
+        // Call the original `propose` function
         return super.propose(targets, values, calldatas, description);
     }
+
 
     function proposalThreshold()
         public
