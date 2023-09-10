@@ -10,6 +10,7 @@ import "openzeppelin-contracts-upgradeable/governance/extensions/GovernorTimeloc
 import "openzeppelin-contracts-upgradeable/proxy/utils/Initializable.sol";
 import "openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "openzeppelin-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "zora-721-contracts/ERC721Drop.sol";
 
 /// @custom:security-contact kent@voteagora.com
 contract AgoraGovernor is
@@ -23,6 +24,10 @@ contract AgoraGovernor is
     OwnableUpgradeable,
     UUPSUpgradeable
 {
+    // Keep track of who proposed what will be used later
+    // to make sure that the proposer is the one who executes
+    mapping(uint256 => address) private _proposers;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -98,41 +103,53 @@ contract AgoraGovernor is
         override(GovernorUpgradeable, IGovernorUpgradeable)
         returns (uint256)
     {
-        return super.propose(targets, values, calldatas, description);
+        uint256 proposalId = super.propose(
+            targets,
+            values,
+            calldatas,
+            description
+        );
+        // Keep track of who proposed what
+        // This will be used later to make sure that the proposer is the one who executes
+        _proposers[proposalId] = msg.sender;
+        return proposalId;
     }
 
     function dropose(
+        address dropFactory,
         string memory name,
         string memory symbol,
         uint64 editionSize,
         uint16 royaltyBPS,
         address payable fundsRecipient,
-        address defaultAdmin,        
-        uint256 saleConfigPrice,
-        uint256 saleConfigDuration,
+        address defaultAdmin,
+        uint104 publicSalePrice,
+        uint32 maxSalePurchasePerAddress,
+        uint64 publicSaleStart,
+        uint64 publicSaleEnd,
+        uint64 presaleStart,
+        uint64 presaleEnd,
+        bytes32 presaleMerkleRoot,
         string memory description,
         string memory animationURI,
-        string memory imageURI
+        string memory imageURI,
+        string memory proposalTitle,
+        string memory proposalDescription
     ) public returns (uint256) {
-        
-        // Zora mainnet address
-        address zoraMainAddress = 0xabEFBc9fD2F806065b4f3C237d4b59D9A97Bcac7;
+        IERC721Drop.SalesConfiguration memory saleConfig = IERC721Drop
+            .SalesConfiguration({
+                publicSalePrice: publicSalePrice,
+                maxSalePurchasePerAddress: maxSalePurchasePerAddress,
+                publicSaleStart: publicSaleStart,
+                publicSaleEnd: publicSaleEnd,
+                presaleStart: presaleStart,
+                presaleEnd: presaleEnd,
+                presaleMerkleRoot: presaleMerkleRoot
+            });
 
-        // Constructing Zora SalesConfiguration struct
-        IERC721Drop.SalesConfiguration memory saleConfig = IERC721Drop.SalesConfiguration({
-            price: saleConfigPrice,
-            duration: saleConfigDuration
-        });
-
-        address[] memory targets = new address[](1);
-        targets[0] = zoraMainAddress;
-
-        uint256[] memory values = new uint256[](1);
-        values[0] = 0;  // No ether sent to the Zora function
-
-        bytes[] memory calldatas = new bytes[](1);
-        calldatas[0] = abi.encodeWithSignature(
-            "createEdition(string,string,uint64,uint16,address,address,IERC721Drop.SalesConfiguration,string,string,string)",
+        // Prepare the call to createEdition
+        bytes memory callData = abi.encodeWithSelector(
+            IERC721Drop(dropFactory).createEdition.selector,
             name,
             symbol,
             editionSize,
@@ -145,10 +162,24 @@ contract AgoraGovernor is
             imageURI
         );
 
-        // Call the original `propose` function
-        return super.propose(targets, values, calldatas, description);
-    }
+        // Concatenate the proposal title and description
+        string memory fullProposalDescription = string(
+            abi.encodePacked(proposalTitle, "##", proposalDescription)
+        );
 
+        // Setup the proposal
+        address[] memory targets = new address[](1);
+        uint256[] memory values = new uint256[](1);
+        bytes[] memory calldatas = new bytes[](1);
+        string memory proposalDescription = "Create a new NFT edition";
+
+        targets[0] = dropFactory;
+        values[0] = 0;
+        calldatas[0] = callData;
+
+        // Call the propose function to start the proposal
+        return propose(targets, values, calldatas, proposalDescription);
+    }
 
     function proposalThreshold()
         public
@@ -159,17 +190,37 @@ contract AgoraGovernor is
         return super.proposalThreshold();
     }
 
-    function _execute(
+    // Get the proposer of a proposal
+    function getProposer(uint256 proposalId) external view returns (address) {
+        return _proposers[proposalId];
+    }
+
+    // The following functions are overrides required by the TimelockController.
+    // Overridding them here to make sure that only the proposer can execute the proposal.
+    function execute(
         uint256 proposalId,
         address[] memory targets,
         uint256[] memory values,
         bytes[] memory calldatas,
         bytes32 descriptionHash
     )
-        internal
+        public
+        payable
         override(GovernorUpgradeable, GovernorTimelockControlUpgradeable)
+        returns (uint256)
     {
-        super._execute(proposalId, targets, values, calldatas, descriptionHash);
+        require(
+            msg.sender == _proposers[proposalId],
+            "AgoraGovernor: Only proposer can execute proposal"
+        );
+        return
+            super.execute(
+                proposalId,
+                targets,
+                values,
+                calldatas,
+                descriptionHash
+            );
     }
 
     function _cancel(

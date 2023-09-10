@@ -2,5 +2,5 @@
 "solidity.packageDefaultDependenciesDirectory": "lib",
  "solidity.compileUsingRemoteVersion": "v0.8.15", 
 "solidity.remappings": [ "forge-std/=lib/forge-std/src/", 
-                     "openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/","openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/"] 
+                     "openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/","openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/","zora-721-contracts/=lib/zora-721-contracts/src/"] 
 } 
