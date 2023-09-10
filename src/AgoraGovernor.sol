@@ -24,10 +24,6 @@ contract AgoraGovernor is
     OwnableUpgradeable,
     UUPSUpgradeable
 {
-    // Keep track of who proposed what will be used later
-    // to make sure that the proposer is the one who executes
-    mapping(uint256 => address) private _proposers;
-
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -109,9 +105,6 @@ contract AgoraGovernor is
             calldatas,
             description
         );
-        // Keep track of who proposed what
-        // This will be used later to make sure that the proposer is the one who executes
-        _proposers[proposalId] = msg.sender;
         return proposalId;
     }
 
@@ -221,6 +214,26 @@ contract AgoraGovernor is
                 calldatas,
                 descriptionHash
             );
+    }
+
+    function _execute(
+        uint256 proposalId,
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        bytes32 descriptionHash
+    ) internal override {
+        // Fetch the proposer for the given proposalId
+        address proposer = _proposals[proposalId].proposer;
+
+        // Ensure that only the original proposer can execute this proposal
+        require(
+            proposer == _msgSender(),
+            "AgoraGovernor: Only the proposer can execute this proposal"
+        );
+
+        // Call the original _execute logic
+        super._execute(proposalId, targets, values, calldatas, descriptionHash);
     }
 
     function _cancel(
