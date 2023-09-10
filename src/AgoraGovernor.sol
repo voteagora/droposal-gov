@@ -188,8 +188,6 @@ contract AgoraGovernor is
         return _proposers[proposalId];
     }
 
-    // The following functions are overrides required by the TimelockController.
-    // Overridding them here to make sure that only the proposer can execute the proposal.
     function execute(
         uint256 proposalId,
         address[] memory targets,
@@ -202,27 +200,6 @@ contract AgoraGovernor is
         override(GovernorUpgradeable, GovernorTimelockControlUpgradeable)
         returns (uint256)
     {
-        require(
-            msg.sender == _proposers[proposalId],
-            "AgoraGovernor: Only proposer can execute proposal"
-        );
-        return
-            super.execute(
-                proposalId,
-                targets,
-                values,
-                calldatas,
-                descriptionHash
-            );
-    }
-
-    function _execute(
-        uint256 proposalId,
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
-        bytes32 descriptionHash
-    ) internal override {
         // Fetch the proposer for the given proposalId
         address proposer = _proposals[proposalId].proposer;
 
@@ -232,8 +209,15 @@ contract AgoraGovernor is
             "AgoraGovernor: Only the proposer can execute this proposal"
         );
 
-        // Call the original _execute logic
-        super._execute(proposalId, targets, values, calldatas, descriptionHash);
+        // Call the original execute logic
+        return
+            super.execute(
+                proposalId,
+                targets,
+                values,
+                calldatas,
+                descriptionHash
+            );
     }
 
     function _cancel(
