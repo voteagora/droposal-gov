@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import "openzeppelin-contracts-upgradeable/governance/GovernorUpgradeable.sol";
-import "openzeppelin-contracts-upgradeable/governance/extensions/GovernorSettingsUpgradeable.sol";
-import "openzeppelin-contracts-upgradeable/governance/extensions/GovernorCountingSimpleUpgradeable.sol";
-import "openzeppelin-contracts-upgradeable/governance/extensions/GovernorVotesUpgradeable.sol";
-import "openzeppelin-contracts-upgradeable/governance/extensions/GovernorVotesQuorumFractionUpgradeable.sol";
-import "openzeppelin-contracts-upgradeable/governance/extensions/GovernorTimelockControlUpgradeable.sol";
-import "openzeppelin-contracts-upgradeable/proxy/utils/Initializable.sol";
-import "openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "openzeppelin-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "zora-721-contracts/ERC721Drop.sol";
+import {GovernorUpgradeable, IGovernorUpgradeable} from "openzeppelin-contracts-upgradeable/governance/GovernorUpgradeable.sol";
+import {GovernorSettingsUpgradeable} from "openzeppelin-contracts-upgradeable/governance/extensions/GovernorSettingsUpgradeable.sol";
+import {GovernorCountingSimpleUpgradeable} from "openzeppelin-contracts-upgradeable/governance/extensions/GovernorCountingSimpleUpgradeable.sol";
+import {GovernorVotesUpgradeable, IVotesUpgradeable} from "openzeppelin-contracts-upgradeable/governance/extensions/GovernorVotesUpgradeable.sol";
+import {GovernorVotesQuorumFractionUpgradeable} from "openzeppelin-contracts-upgradeable/governance/extensions/GovernorVotesQuorumFractionUpgradeable.sol";
+import {GovernorTimelockControlUpgradeable, TimelockControllerUpgradeable} from "openzeppelin-contracts-upgradeable/governance/extensions/GovernorTimelockControlUpgradeable.sol";
+import {Initializable} from "openzeppelin-contracts-upgradeable/proxy/utils/Initializable.sol";
+import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {UUPSUpgradeable} from "openzeppelin-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {ZoraNFTCreatorV1} from "zora-721-contracts/ZoraNFTCreatorV1.sol";
+import {ERC721Drop} from "zora-721-contracts/ERC721Drop.sol";
 
 /// @custom:security-contact kent@voteagora.com
 contract AgoraGovernor is
@@ -24,6 +25,8 @@ contract AgoraGovernor is
     OwnableUpgradeable,
     UUPSUpgradeable
 {
+    mapping(uint256 => address) private _proposers;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -105,73 +108,76 @@ contract AgoraGovernor is
             calldatas,
             description
         );
+        // Store the address of the proposer for this proposalId
+        _proposers[proposalId] = _msgSender();
         return proposalId;
     }
 
-    function dropose(
-        address dropFactory,
-        string memory name,
-        string memory symbol,
-        uint64 editionSize,
-        uint16 royaltyBPS,
-        address payable fundsRecipient,
-        address defaultAdmin,
-        uint104 publicSalePrice,
-        uint32 maxSalePurchasePerAddress,
-        uint64 publicSaleStart,
-        uint64 publicSaleEnd,
-        uint64 presaleStart,
-        uint64 presaleEnd,
-        bytes32 presaleMerkleRoot,
-        string memory description,
-        string memory animationURI,
-        string memory imageURI,
-        string memory proposalTitle,
-        string memory proposalDescription
-    ) public returns (uint256) {
-        IERC721Drop.SalesConfiguration memory saleConfig = IERC721Drop
+    struct DroposeParams {
+        address dropFactory;
+        string name;
+        string symbol;
+        uint64 editionSize;
+        uint16 royaltyBPS;
+        address payable fundsRecipient;
+        address defaultAdmin;
+        uint104 publicSalePrice;
+        uint32 maxSalePurchasePerAddress;
+        uint64 publicSaleStart;
+        uint64 publicSaleEnd;
+        uint64 presaleStart;
+        uint64 presaleEnd;
+        bytes32 presaleMerkleRoot;
+        string description;
+        string animationURI;
+        string imageURI;
+        string proposalTitle;
+        string proposalDescription;
+    }
+
+    function dropose(DroposeParams memory params) public returns (uint256) {
+        ERC721Drop.SalesConfiguration memory saleConfig = ERC721Drop
             .SalesConfiguration({
-                publicSalePrice: publicSalePrice,
-                maxSalePurchasePerAddress: maxSalePurchasePerAddress,
-                publicSaleStart: publicSaleStart,
-                publicSaleEnd: publicSaleEnd,
-                presaleStart: presaleStart,
-                presaleEnd: presaleEnd,
-                presaleMerkleRoot: presaleMerkleRoot
+                publicSalePrice: params.publicSalePrice,
+                maxSalePurchasePerAddress: params.maxSalePurchasePerAddress,
+                publicSaleStart: params.publicSaleStart,
+                publicSaleEnd: params.publicSaleEnd,
+                presaleStart: params.presaleStart,
+                presaleEnd: params.presaleEnd,
+                presaleMerkleRoot: params.presaleMerkleRoot
             });
 
-        // Prepare the call to createEdition
         bytes memory callData = abi.encodeWithSelector(
-            IERC721Drop(dropFactory).createEdition.selector,
-            name,
-            symbol,
-            editionSize,
-            royaltyBPS,
-            fundsRecipient,
-            defaultAdmin,
+            ZoraNFTCreatorV1(params.dropFactory).createEdition.selector,
+            params.name,
+            params.symbol,
+            params.editionSize,
+            params.royaltyBPS,
+            params.fundsRecipient,
+            params.defaultAdmin,
             saleConfig,
-            description,
-            animationURI,
-            imageURI
+            params.description,
+            params.animationURI,
+            params.imageURI
         );
 
-        // Concatenate the proposal title and description
         string memory fullProposalDescription = string(
-            abi.encodePacked(proposalTitle, "##", proposalDescription)
+            abi.encodePacked(
+                params.proposalTitle,
+                "##",
+                params.proposalDescription
+            )
         );
 
-        // Setup the proposal
         address[] memory targets = new address[](1);
         uint256[] memory values = new uint256[](1);
         bytes[] memory calldatas = new bytes[](1);
-        string memory proposalDescription = "Create a new NFT edition";
 
-        targets[0] = dropFactory;
+        targets[0] = params.dropFactory;
         values[0] = 0;
         calldatas[0] = callData;
 
-        // Call the propose function to start the proposal
-        return propose(targets, values, calldatas, proposalDescription);
+        return propose(targets, values, calldatas, fullProposalDescription);
     }
 
     function proposalThreshold()
@@ -201,7 +207,7 @@ contract AgoraGovernor is
         returns (uint256)
     {
         // Fetch the proposer for the given proposalId
-        address proposer = _proposals[proposalId].proposer;
+        address proposer = _proposers[proposalId].proposer;
 
         // Ensure that only the original proposer can execute this proposal
         require(

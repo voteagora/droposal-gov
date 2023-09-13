@@ -3,15 +3,15 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 import "../src/AgoraGovernor.sol";
-import "./mocks/MockERC721Drop.sol";
+
 
 contract AgoraGovernorTest is Test {
     AgoraGovernor governor;
-    MockERC721Drop dropFactory;
+    ERC721Drop dropFactory;
 
     function setUp() public {
         governor = new AgoraGovernor();
-        dropFactory = new MockERC721Drop();
+        dropFactory = new ERC721Drop();
     }
 
     function testDropose() public {
