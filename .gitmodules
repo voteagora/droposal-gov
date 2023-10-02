@@ -4,6 +4,3 @@
 [submodule "lib/zora-721-contracts"]
 	path = lib/zora-721-contracts
 	url = https://github.com/ourzora/zora-721-contracts
-[submodule "lib/zora-1155-contracts"]
-	path = lib/zora-1155-contracts
-	url = https://github.com/ourzora/zora-1155-contracts
