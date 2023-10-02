@@ -118,7 +118,6 @@ contract AgoraGovernor is
         string proposalTitle;
         string proposalDescription;
     }
-    //
 
     function dropose(DroposeParams memory params) public returns (uint256) {
         IERC721Drop.SalesConfiguration memory saleConfig = IERC721Drop.SalesConfiguration({
