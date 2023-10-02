@@ -22,8 +22,8 @@ import {
 import {Initializable} from "openzeppelin-contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "openzeppelin-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {ZoraNFTCreatorV1} from "zora-721-contracts/ZoraNFTCreatorV1.sol";
-import {IERC721Drop} from "zora-721-contracts/interfaces/IERC721Drop.sol";
+import {ZoraNFTCreatorV1} from "zora-1155-contracts/ZoraNFTCreatorV1.sol";
+import {IERC721Drop} from "zora-1155-contracts/interfaces/IERC721Drop.sol";
 
 /// @custom:security-contact kent@voteagora.com
 contract AgoraGovernor is
@@ -45,7 +45,7 @@ contract AgoraGovernor is
     }
 
     function initialize(IVotesUpgradeable _token, TimelockControllerUpgradeable _timelock) public initializer {
-        __Governor_init("Agora Governor");
+        __Governor_init("Agora Nouns Governor");
         __GovernorSettings_init(7200, /* 1 day */ 50400, /* 1 week */ 0);
         __GovernorCountingSimple_init();
         __GovernorVotes_init(_token);

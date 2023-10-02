@@ -1,5 +1,5 @@
 ds-test/=lib/forge-std/lib/ds-test/src/
 forge-std/=lib/forge-std/src/
-openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/
-openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
+openzeppelin-contracts-upgradeable/=src/contracts/openzeppelin-contracts-upgradeable/
 zora-721-contracts/=lib/zora-721-contracts/src/
+zora-1155-contracts/=lib/zora-1155-contracts/src/
