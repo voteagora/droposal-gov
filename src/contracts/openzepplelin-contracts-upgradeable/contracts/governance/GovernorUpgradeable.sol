@@ -59,6 +59,8 @@ abstract contract GovernorUpgradeable is
     string private _name;
 
     /// @custom:oz-retyped-from mapping(uint256 => Governor.ProposalCore)
+    // Overriding to make sure that we can get access to this when
+    // running execute
     mapping(uint256 => ProposalCore) internal _proposals;
 
     // This queue keeps track of the governor operating on itself. Calls to functions protected by the
