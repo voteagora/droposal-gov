@@ -7,3 +7,6 @@
 [submodule "lib/zora-1155-contracts"]
 	path = lib/zora-1155-contracts
 	url = https://github.com/ourzora/zora-1155-contracts
+[submodule "lib/solmate"]
+	path = lib/solmate
+	url = https://github.com/transmissions11/solmate
