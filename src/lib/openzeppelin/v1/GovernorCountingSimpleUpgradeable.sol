@@ -4,7 +4,7 @@
 pragma solidity ^0.8.0;
 
 import {GovernorUpgradeableV1} from "./GovernorUpgradeable.sol";
-import {Initializable} from "@openzeppelin-upgradeable/proxy/utils/Initializable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /**
  * Modifications:

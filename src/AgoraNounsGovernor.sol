@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import {OwnableUpgradeable} from "@openzeppelin-upgradeable/access/OwnableUpgradeable.sol";
-import {UUPSUpgradeable} from "@openzeppelin-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {GovernorUpgradeableV1, IGovernorUpgradeable} from "src/lib/openzeppelin/v1/GovernorUpgradeable.sol";
 import {GovernorSettingsUpgradeableV1} from "src/lib/openzeppelin/v1/GovernorSettingsUpgradeable.sol";
 import {GovernorCountingSimpleUpgradeableV1} from "src/lib/openzeppelin/v1/GovernorCountingSimpleUpgradeable.sol";
 import {GovernorVotesUpgradeableV1, IVotesUpgradeable} from "src/lib/openzeppelin/v1/GovernorVotesUpgradeable.sol";
 // import {ZoraNFTCreatorV1} from "zora-721/ZoraNFTCreatorV1.sol";
-// import {IERC721Drop} from "zora-721/interfaces/IERC721Drop.sol";
+import {IERC721Drop} from "zora-721/interfaces/IERC721Drop.sol";
 
 // TODO:
 // - Confirm: NO TIMELOCK?

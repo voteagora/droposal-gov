@@ -3,17 +3,20 @@
 
 pragma solidity ^0.8.0;
 
-import {IERC721ReceiverUpgradeable} from "@openzeppelin-upgradeable/token/ERC721/IERC721ReceiverUpgradeable.sol";
-import {IERC1155ReceiverUpgradeable} from "@openzeppelin-upgradeable/token/ERC1155/IERC1155ReceiverUpgradeable.sol";
-import {ECDSAUpgradeable} from "@openzeppelin-upgradeable/utils/cryptography/ECDSAUpgradeable.sol";
-import {EIP712Upgradeable} from "@openzeppelin-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
-import {ERC165Upgradeable} from "@openzeppelin-upgradeable/utils/introspection/ERC165Upgradeable.sol";
-import {SafeCastUpgradeable} from "@openzeppelin-upgradeable/utils/math/SafeCastUpgradeable.sol";
-import {DoubleEndedQueueUpgradeable} from "@openzeppelin-upgradeable/utils/structs/DoubleEndedQueueUpgradeable.sol";
-import {AddressUpgradeable} from "@openzeppelin-upgradeable/utils/AddressUpgradeable.sol";
-import {ContextUpgradeable} from "@openzeppelin-upgradeable/utils/ContextUpgradeable.sol";
-import {Initializable} from "@openzeppelin-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin-upgradeable/governance/IGovernorUpgradeable.sol";
+import {IERC721ReceiverUpgradeable} from
+    "@openzeppelin/contracts-upgradeable/token/ERC721/IERC721ReceiverUpgradeable.sol";
+import {IERC1155ReceiverUpgradeable} from
+    "@openzeppelin/contracts-upgradeable/token/ERC1155/IERC1155ReceiverUpgradeable.sol";
+import {ECDSAUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/cryptography/ECDSAUpgradeable.sol";
+import {EIP712Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
+import {ERC165Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/introspection/ERC165Upgradeable.sol";
+import {SafeCastUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/math/SafeCastUpgradeable.sol";
+import {DoubleEndedQueueUpgradeable} from
+    "@openzeppelin/contracts-upgradeable/utils/structs/DoubleEndedQueueUpgradeable.sol";
+import {AddressUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
+import {ContextUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/governance/IGovernorUpgradeable.sol";
 
 /**
  * Modifications:

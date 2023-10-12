@@ -4,8 +4,11 @@
 pragma solidity ^0.8.0;
 
 import {GovernorUpgradeableV1, SafeCastUpgradeable} from "./GovernorUpgradeable.sol";
-import {IERC5805Upgradeable, IVotesUpgradeable} from "@openzeppelin-upgradeable/interfaces/IERC5805Upgradeable.sol";
-import {Initializable} from "@openzeppelin-upgradeable/proxy/utils/Initializable.sol";
+import {
+    IERC5805Upgradeable,
+    IVotesUpgradeable
+} from "@openzeppelin/contracts-upgradeable/interfaces/IERC5805Upgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /**
  * Modifications:
