@@ -1,7 +1,14 @@
 [profile.default]
-src = "src"
-out = "out"
-libs = ["lib"]
+optimizer_runs = 100000
+src = 'src'
+fs_permissions = [{ access = "read", path = "./deployments/"}]
 
-# See more config options https://github.com/foundry-rs/foundry/tree/master/config
+[rpc_endpoints]
+mainnet = "${RPC_URL_MAINNET}"
+op = "${RPC_URL_OPTIMISM}"
+goerli = "${RPC_URL_GOERLI}"
 
+[etherscan]
+mainnet = {key = "${ETHERSCAN_KEY_ETHEREUM}"}
+op = {key = "${ETHERSCAN_KEY_OPTIMISM}"}
+goerli = {key = "${ETHERSCAN_KEY_ETHEREUM}", url = "https://api-goerli.etherscan.io/api"}

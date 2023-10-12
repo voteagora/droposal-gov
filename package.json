@@ -1,0 +1,12 @@
+{
+  "name": "agora-governor",
+  "bugs": {
+    "url": "https://github.com/voteagora/agora-governor/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/voteagora/agora-governor"
+  },
+  "version": "1.0.0",
+  "license": "MIT"
+}

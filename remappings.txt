@@ -1,5 +1,9 @@
 ds-test/=lib/forge-std/lib/ds-test/src/
 forge-std/=lib/forge-std/src/
-openzeppelin-contracts-upgradeable/=src/contracts/openzeppelin-contracts-upgradeable/
-zora-721-contracts/=lib/zora-721-contracts/src/
-zora-1155-contracts/=lib/zora-1155-contracts/src/
+solmate/=lib/solmate/src/
+solady/=lib/solady/src/
+create3-factory/=lib/create3-factory/src/
+@openzeppelin/=lib/openzeppelin-contracts/contracts/
+@openzeppelin-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
+zora-721/=lib/zora-721-contracts/src/
+zora-1155/=lib/zora-1155-contracts/src/
