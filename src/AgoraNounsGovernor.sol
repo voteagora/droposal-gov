@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.9;
+pragma solidity 0.8.19;
 
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -7,14 +7,13 @@ import {GovernorUpgradeableV1, IGovernorUpgradeable} from "src/lib/openzeppelin/
 import {GovernorSettingsUpgradeableV1} from "src/lib/openzeppelin/v1/GovernorSettingsUpgradeable.sol";
 import {GovernorCountingSimpleUpgradeableV1} from "src/lib/openzeppelin/v1/GovernorCountingSimpleUpgradeable.sol";
 import {GovernorVotesUpgradeableV1, IVotesUpgradeable} from "src/lib/openzeppelin/v1/GovernorVotesUpgradeable.sol";
-// import {ZoraNFTCreatorV1} from "zora-721/ZoraNFTCreatorV1.sol";
-import {IERC721Drop} from "zora-721/interfaces/IERC721Drop.sol";
+import {IZoraNFTCreator, IERC721Drop} from "src/interfaces/IZoraNFTCreator.sol";
+import {DroposalConfig} from "src/structs/DroposalConfig.sol";
+import {DroposalParams, NFTType} from "src/structs/DroposalParams.sol";
 
 // TODO:
-// - Confirm: NO TIMELOCK?
-// - Currently inheriting quorum and proposalThreshold of nouns. Lmk if I should inherit more
-// - Do we wanna have same proposalThreshold, votingPeriod, votingDelay as Nouns? Or should we allow modifying them based on governance?
-// - Should upgrades be doable by us, or by governance like on nouns?
+// - Ask zora about how to set the splits
+// - Should we draft droposalTypes offchain? Any reason why we may want to do it onchain?
 
 /// @title Agora Nouns Governor
 /// @notice A governor implementation to handle the creation of droposals
@@ -29,17 +28,32 @@ contract AgoraNounsGovernor is
     GovernorVotesUpgradeableV1
 {
     /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    event DroposalTypeSet(uint256 droposalType, DroposalConfig config, string droposalTypeName);
+
+    /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
 
     error OnlyProposer();
+    error OnlyDroposals();
+    error InvalidDroposalType();
+
+    /*//////////////////////////////////////////////////////////////
+                           IMMUTABLE STORAGE
+    //////////////////////////////////////////////////////////////*/
+
+    // TODO: Add addresses
+    IGovernorUpgradeable public constant nounsGovernor = IGovernorUpgradeable(address(1));
+    address public constant zoraNFTCreator = address(2);
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    // TODO: Add address
-    IGovernorUpgradeable public constant nounsGovernor = IGovernorUpgradeable(address(1));
+    mapping(uint256 droposalTypeId => DroposalConfig) public droposalTypes;
 
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
@@ -66,34 +80,210 @@ contract AgoraNounsGovernor is
         __GovernorVotes_init(nounsToken);
         __Ownable_init();
         __UUPSUpgradeable_init();
+
+        // TODO: Init droposalTypes
+        _setDroposalType(
+            0, DroposalConfig({editionSize: 0, publicSalePrice: 0, publicSaleDuration: 0, splitToArtist: 0}), "Standard"
+        );
+        _setDroposalType(
+            1, DroposalConfig({editionSize: 0, publicSalePrice: 0, publicSaleDuration: 0, splitToArtist: 0}), "Premium"
+        );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            WRITE FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /// Format proposal for a drop
+    function dropose(DroposalParams memory params) public returns (uint256) {
+        DroposalConfig memory config = droposalTypes[params.droposalType];
+
+        if (config.editionSize == 0) revert InvalidDroposalType();
+
+        address[] memory targets = new address[](1);
+        uint256[] memory values = new uint256[](1);
+        bytes[] memory calldatas = new bytes[](1);
+
+        // 1 day (pending) + 7 days (voting) + 7 days (after approval)
+        uint256 publicSaleStart = block.timestamp + 15 days;
+
+        if (params.nftType == NFTType.ERC721) {
+            (targets, calldatas) = _encode721Data(publicSaleStart, params, config, targets, calldatas);
+        } else {
+            if (params.nftCollection == address(0)) {
+                (targets, calldatas) = _encode1155Data(publicSaleStart, params, config, targets, calldatas);
+            } else {
+                (targets, calldatas) = _encodeExisting1155Data(publicSaleStart, params, config, targets, calldatas);
+            }
+        }
+
+        return super.propose(targets, values, calldatas, params.proposalDescription);
+    }
+
+    /// Disabled to only allow droposals
+    function propose(
+        address[] memory, /* targets */
+        uint256[] memory, /* values */
+        bytes[] memory, /* calldatas */
+        string memory /* description */
+    ) public pure override returns (uint256) {
+        revert OnlyDroposals();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               RESTRICTED
+    //////////////////////////////////////////////////////////////*/
+
+    function setDroposalType(uint256 droposalTypeId, DroposalConfig memory config, string memory droposalTypeName)
+        public
+        onlyOwner
+    {
+        _setDroposalType(droposalTypeId, config, droposalTypeName);
+    }
+
+    function _setDroposalType(uint256 droposalTypeId, DroposalConfig memory config, string memory droposalTypeName)
+        internal
+    {
+        droposalTypes[droposalTypeId] = config;
+        emit DroposalTypeSet(droposalTypeId, config, droposalTypeName);
     }
 
     /*//////////////////////////////////////////////////////////////
                              VIEW FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    // Inherit quorum from the main Nouns governor
-    function quorum(uint256 blockNumber) public view override returns (uint256) {
-        return nounsGovernor.quorum(blockNumber);
-    }
-
-    // Getter for proposals
+    /// Getter for proposals
     function proposals(uint256 proposalId) public view returns (ProposalCore memory proposal) {
         return _proposals[proposalId];
     }
 
+    /// Inherit quorum from the main Nouns governor
+    function quorum(uint256 blockNumber) public view override returns (uint256) {
+        return nounsGovernor.quorum(blockNumber);
+    }
+
+    /// Inherit quorum from the main Nouns governor
+    /// @dev Increment to account for different revert condition in propose
+    // TODO: Test
     function proposalThreshold()
         public
         view
         override(GovernorUpgradeableV1, GovernorSettingsUpgradeableV1)
         returns (uint256)
     {
-        return GovernorUpgradeableV1(payable(address(nounsGovernor))).proposalThreshold();
+        unchecked {
+            return GovernorUpgradeableV1(payable(address(nounsGovernor))).proposalThreshold() + 1;
+        }
     }
 
     /*//////////////////////////////////////////////////////////////
                                 INTERNAL
     //////////////////////////////////////////////////////////////*/
+
+    function _encode721Data(
+        uint256 publicSaleStart,
+        DroposalParams memory params,
+        DroposalConfig memory config,
+        address[] memory targets,
+        bytes[] memory calldatas
+    ) internal view returns (address[] memory, bytes[] memory) {
+        targets[0] = zoraNFTCreator;
+        calldatas[0] = abi.encodeCall(
+            IZoraNFTCreator.createEdition,
+            (
+                params.name,
+                params.symbol,
+                config.editionSize,
+                params.royaltyBPS,
+                params.fundsRecipient,
+                msg.sender,
+                IERC721Drop.SalesConfiguration({
+                    publicSalePrice: config.publicSalePrice,
+                    maxSalePurchasePerAddress: 0,
+                    publicSaleStart: uint64(publicSaleStart),
+                    publicSaleEnd: uint64(publicSaleStart) + config.publicSaleDuration,
+                    presaleStart: 0,
+                    presaleEnd: 0,
+                    presaleMerkleRoot: 0
+                }),
+                params.description,
+                "",
+                params.imageURI
+            )
+        );
+
+        return (targets, calldatas);
+    }
+
+    function _encode1155Data(
+        uint256 publicSaleStart,
+        DroposalParams memory params,
+        DroposalConfig memory config,
+        address[] memory targets,
+        bytes[] memory calldatas
+    ) internal view returns (address[] memory, bytes[] memory) {
+        targets[0] = zoraNFTCreator;
+        calldatas[0] = abi.encodeCall(
+            IZoraNFTCreator.createEdition,
+            (
+                params.name,
+                params.symbol,
+                config.editionSize,
+                params.royaltyBPS,
+                params.fundsRecipient,
+                msg.sender,
+                IERC721Drop.SalesConfiguration({
+                    publicSalePrice: config.publicSalePrice,
+                    maxSalePurchasePerAddress: 0,
+                    publicSaleStart: uint64(publicSaleStart),
+                    publicSaleEnd: uint64(publicSaleStart) + config.publicSaleDuration,
+                    presaleStart: 0,
+                    presaleEnd: 0,
+                    presaleMerkleRoot: 0
+                }),
+                params.description,
+                "",
+                params.imageURI
+            )
+        );
+
+        return (targets, calldatas);
+    }
+
+    function _encodeExisting1155Data(
+        uint256 publicSaleStart,
+        DroposalParams memory params,
+        DroposalConfig memory config,
+        address[] memory targets,
+        bytes[] memory calldatas
+    ) internal view returns (address[] memory, bytes[] memory) {
+        targets[0] = zoraNFTCreator;
+        calldatas[0] = abi.encodeCall(
+            IZoraNFTCreator.createEdition,
+            (
+                params.name,
+                params.symbol,
+                config.editionSize,
+                params.royaltyBPS,
+                params.fundsRecipient,
+                msg.sender,
+                IERC721Drop.SalesConfiguration({
+                    publicSalePrice: config.publicSalePrice,
+                    maxSalePurchasePerAddress: 0,
+                    publicSaleStart: uint64(publicSaleStart),
+                    publicSaleEnd: uint64(publicSaleStart) + config.publicSaleDuration,
+                    presaleStart: 0,
+                    presaleEnd: 0,
+                    presaleMerkleRoot: 0
+                }),
+                params.description,
+                "",
+                params.imageURI
+            )
+        );
+
+        return (targets, calldatas);
+    }
 
     /// @dev Add requirement that only the proposer can execute
     function _execute(
@@ -107,78 +297,4 @@ contract AgoraNounsGovernor is
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
-    //     // TODO: Disable to only allow droposals? YES
-    //     function propose(
-    //         address[] memory targets,
-    //         uint256[] memory values,
-    //         bytes[] memory calldatas,
-    //         string memory description
-    //     ) public override(GovernorUpgradeable, IGovernorUpgradeable) returns (uint256) {
-    //         uint256 proposalId = super.propose(targets, values, calldatas, description);
-    //         // Store the address of the proposer for this proposalId
-    //         _proposers[proposalId] = _msgSender();
-    //         return proposalId;
-    //     }
-
-    //     struct DroposeParams {
-    //         address dropFactory;
-    //         string name;
-    //         string symbol;
-    //         uint64 editionSize;
-    //         uint16 royaltyBPS;
-    //         address payable fundsRecipient;
-    //         address defaultAdmin;
-    //         uint104 publicSalePrice;
-    //         uint32 maxSalePurchasePerAddress;
-    //         uint64 publicSaleStart;
-    //         uint64 publicSaleEnd;
-    //         uint64 presaleStart;
-    //         uint64 presaleEnd;
-    //         bytes32 presaleMerkleRoot;
-    //         string description;
-    //         string animationURI;
-    //         string imageURI;
-    //         string proposalTitle;
-    //         string proposalDescription;
-    //     }
-
-    //     function dropose(DroposeParams memory params) public returns (uint256) {
-    //         IERC721Drop.SalesConfiguration memory saleConfig = IERC721Drop.SalesConfiguration({
-    //             publicSalePrice: params.publicSalePrice,
-    //             maxSalePurchasePerAddress: params.maxSalePurchasePerAddress,
-    //             publicSaleStart: params.publicSaleStart,
-    //             publicSaleEnd: params.publicSaleEnd,
-    //             presaleStart: params.presaleStart,
-    //             presaleEnd: params.presaleEnd,
-    //             presaleMerkleRoot: params.presaleMerkleRoot
-    //         });
-
-    //         bytes memory callData = abi.encodeWithSelector(
-    //             ZoraNFTCreatorV1(params.dropFactory).createEdition.selector,
-    //             params.name,
-    //             params.symbol,
-    //             params.editionSize,
-    //             params.royaltyBPS,
-    //             params.fundsRecipient,
-    //             params.defaultAdmin,
-    //             saleConfig,
-    //             params.description,
-    //             params.animationURI,
-    //             params.imageURI
-    //         );
-
-    //         string memory fullProposalDescription =
-    //             string(abi.encodePacked(params.proposalTitle, "##", params.proposalDescription));
-
-    //         address[] memory targets = new address[](1);
-    //         uint256[] memory values = new uint256[](1);
-    //         bytes[] memory calldatas = new bytes[](1);
-
-    //         targets[0] = params.dropFactory;
-    //         values[0] = 0;
-    //         calldatas[0] = callData;
-
-    //         return propose(targets, values, calldatas, fullProposalDescription);
-    //     }
 }
