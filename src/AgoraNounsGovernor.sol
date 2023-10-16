@@ -311,10 +311,12 @@ contract AgoraNounsGovernor is
 
     /// Propose a new droposal type to be approved by contract owner.
     function proposeDroposalType(DroposalConfig memory config) public {
-        uint256 pendingDroposalTypeId = ++currentPendingDroposalCount;
+        unchecked {
+            uint256 pendingDroposalTypeId = ++currentPendingDroposalCount;
 
-        pendingDroposalTypes[pendingDroposalTypeId] = config;
-        emit DroposalTypeProposed(pendingDroposalTypeId, config);
+            pendingDroposalTypes[pendingDroposalTypeId] = config;
+            emit DroposalTypeProposed(pendingDroposalTypeId, config);
+        }
     }
 
     /// Approve a pending droposal type.
