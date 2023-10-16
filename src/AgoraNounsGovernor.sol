@@ -11,15 +11,11 @@ import {GovernorVotesUpgradeableV1, IVotesUpgradeable} from "src/lib/openzeppeli
 import {IZoraCreator721, IERC721Drop} from "src/interfaces/IZoraCreator721.sol";
 import {IZoraCreator1155, RoyaltyConfiguration} from "src/interfaces/IZoraCreator1155.sol";
 import {IZoraCreator1155Factory} from "src/interfaces/IZoraCreator1155Factory.sol";
-import {DroposalConfig} from "src/structs/DroposalConfig.sol";
 import {
-    DroposalParams,
-    NFTType,
-    ERC721Params,
-    ERC1155Params,
-    ERC1155TokenParams,
-    FixedPriceMinter_SalesConfig
+    DroposalParams, NFTType, ERC721Params, ERC1155Params, ERC1155TokenParams
 } from "src/structs/DroposalParams.sol";
+import {DroposalConfig} from "src/structs/DroposalConfig.sol";
+import {FixedPriceMinter_SalesConfig} from "src/structs/FixedPriceMinter_SalesConfig.sol";
 
 // TODO:
 // - Set initial droposal types
@@ -41,7 +37,7 @@ import {
 // - Inherit quorum and proposalThreshold from main Nouns governor.
 
 /// @title Agora Nouns Governor
-/// @notice A governor implementation to handle the creation of droposals
+/// @notice Governor to handle the creation of droposals.
 /// @author jacopo@dlabs.app
 /// @author kent@voteagora.com
 contract AgoraNounsGovernor is
@@ -58,6 +54,7 @@ contract AgoraNounsGovernor is
 
     event DroposalTypeSet(uint256 droposalTypeId, DroposalConfig config);
     event DroposalTypeProposed(uint256 droposalTypeId, DroposalConfig config);
+    event DroposalTypeApproved(uint256 droposalTypeId);
 
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
@@ -83,7 +80,7 @@ contract AgoraNounsGovernor is
     mapping(uint256 droposalTypeId => DroposalConfig) public droposalTypes;
 
     mapping(uint256 pendingDroposalTypeId => DroposalConfig) public pendingDroposalTypes;
-    uint256 public currentDroposalTypeId;
+    uint256 public currentPendingDroposalCount;
 
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
@@ -140,7 +137,7 @@ contract AgoraNounsGovernor is
     //////////////////////////////////////////////////////////////*/
 
     /// Format proposal for a drop.
-    /// For existing erc1155, AgoraNounsGovernor has to have admin rights for the token being created.
+    /// For existing erc1155, AgoraNounsGovernor requires admin rights for the token being created.
     function dropose(DroposalParams memory droposalParams) public returns (uint256) {
         DroposalConfig memory config = droposalTypes[droposalParams.droposalType];
 
@@ -314,7 +311,7 @@ contract AgoraNounsGovernor is
 
     /// Propose a new droposal type to be approved by contract owner.
     function proposeDroposalType(DroposalConfig memory config) public {
-        uint256 pendingDroposalTypeId = ++currentDroposalTypeId;
+        uint256 pendingDroposalTypeId = ++currentPendingDroposalCount;
 
         pendingDroposalTypes[pendingDroposalTypeId] = config;
         emit DroposalTypeProposed(pendingDroposalTypeId, config);
@@ -328,6 +325,7 @@ contract AgoraNounsGovernor is
                 || pendingDroposalTypes[pendingDroposalTypeId].editionSize == 0
         ) revert InvalidDroposalType();
         _setDroposalType(droposalTypeId, pendingDroposalTypes[pendingDroposalTypeId]);
+        emit DroposalTypeApproved(pendingDroposalTypeId);
     }
 
     /// Set `config` for a `droposalTypeId`.
@@ -364,7 +362,7 @@ contract AgoraNounsGovernor is
     }
 
     /*//////////////////////////////////////////////////////////////
-                                 OTHER
+                                  OTHER
     //////////////////////////////////////////////////////////////*/
 
     /// Getter for proposals.
