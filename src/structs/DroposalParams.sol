@@ -1,55 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
-enum NFTType {
-    ERC721,
-    ERC1155
-}
-
-struct ERC721Params {
-    string name;
-    string symbol;
-    uint16 royaltyBPS;
-    address payable fundsRecipient;
-    string imageURI;
-    string description;
-}
-
-struct ERC1155Params {
-    string name;
-    string contractURI;
-    ERC1155TokenParams tokenParams;
-}
-
-struct ERC1155TokenParams {
-    uint16 royaltyBPS;
-    address payable fundsRecipient;
-    string tokenURI;
-}
+import {NFTType, ERC721Params, ERC1155Params, ERC1155TokenParams} from "./NFTParams.sol";
 
 struct DroposalParams {
-    // Picked by USER
+    /// ID of the droposal type
     uint256 droposalType;
+    /// Type of the NFT to be created, ERC721 or ERC1155
     NFTType nftType;
+    /// Address of the NFT contract for the drop
     address nftCollection;
+    /// Description of the proposal
     string proposalDescription;
+    /// Parameters for the NFT contract, encoded as ERC721Params, ERC1155Params or ERC1155TokenParams
     bytes nftParams;
 }
-
-//
-// Derived from droposal Type
-// uint64 editionSize;
-// uint104 publicSalePrice;
-// uint64 publicSaleEnd;
-// uint256 splitToArtist;
-//
-// Default values
-// address defaultAdmin; // default to creator
-// uint32 maxSalePurchasePerAddress; // default to unlimited
-// uint64 publicSaleStart; // Default to droposal end date + 7 days
-//
-// TBD
-// string animationURI; // Default to no animation, empty string ?
-// uint64 presaleStart; // Default to no presale?
-// uint64 presaleEnd; // Default to no presale?
-// bytes32 presaleMerkleRoot; // Default to no presale?

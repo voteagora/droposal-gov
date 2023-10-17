@@ -24,8 +24,7 @@ import {FixedPriceMinter_SalesConfig} from "src/structs/FixedPriceMinter_SalesCo
 // --------------
 // Questions:
 // - [Agora] Are the init params set up as intended?
-// - [Agora] Should we draft droposalTypes offchain? Any reason why we may want to do it onchain?
-// - [zora] How should splits be set up (ie 40% artist, 60% DAO)
+// - [Agora] Use Slice for splits?
 // - [zora] Check if create edition / mint logic is correct
 
 // Features:
@@ -70,7 +69,7 @@ contract AgoraNounsGovernor is
 
     IGovernorUpgradeable public constant nounsGovernor = IGovernorUpgradeable(address(1));
     address public constant zoraNFTCreator721 = address(2);
-    IZoraCreator1155Factory public constant zoraNFTCreator1155 = IZoraCreator1155Factory(address(3));
+    IZoraCreator1155Factory public constant zoraCreator1155Factory = IZoraCreator1155Factory(address(3));
     address public constant FIXED_PRICE_MINTER = address(4);
 
     /*//////////////////////////////////////////////////////////////
@@ -112,10 +111,10 @@ contract AgoraNounsGovernor is
             0,
             DroposalConfig({
                 name: "Standard",
-                editionSize: 0,
-                publicSalePrice: 0,
-                publicSaleDuration: 0,
-                splitToArtist: 0,
+                editionSize: 1_000,
+                publicSalePrice: 0.03 ether,
+                publicSaleDuration: 3 days,
+                fundsRecipientSplit: 4_000,
                 minter: FIXED_PRICE_MINTER
             })
         );
@@ -126,7 +125,7 @@ contract AgoraNounsGovernor is
                 editionSize: 3_000,
                 publicSalePrice: 0.069 ether,
                 publicSaleDuration: 3 days,
-                splitToArtist: 0,
+                fundsRecipientSplit: 4_000,
                 minter: FIXED_PRICE_MINTER
             })
         );
@@ -182,7 +181,7 @@ contract AgoraNounsGovernor is
                 params.symbol,
                 config.editionSize,
                 params.royaltyBPS,
-                params.fundsRecipient,
+                payable(address(0)), // )recipient, TODO: Set split to params.fundsRecipient, with config.fundsRecipientSplit
                 msg.sender, // defaultAdmin
                 IERC721Drop.SalesConfiguration({
                     publicSalePrice: config.publicSalePrice,
@@ -194,7 +193,7 @@ contract AgoraNounsGovernor is
                     presaleMerkleRoot: 0
                 }),
                 params.description,
-                "", // animationURI
+                params.animationURI,
                 params.imageURI,
                 address(0) // createReferral
             )
@@ -218,19 +217,14 @@ contract AgoraNounsGovernor is
                 saleEnd: publicSaleStart + config.publicSaleDuration,
                 maxTokensPerAddress: 0,
                 pricePerToken: config.publicSalePrice,
-                fundsRecipient: params.tokenParams.fundsRecipient
+                fundsRecipient: payable(address(0)) // recipient, TODO: Set split to params.tokenParams.fundsRecipient, with config.fundsRecipientSplit
             })
         );
 
         bytes[] memory setupActions = new bytes[](3);
         // setupNewToken
-        setupActions[0] = abi.encodeCall(
-            IZoraCreator1155.setupNewToken,
-            (
-                params.tokenParams.tokenURI,
-                config.editionSize // maxSupply TODO: check
-            )
-        );
+        setupActions[0] =
+            abi.encodeCall(IZoraCreator1155.setupNewToken, (params.tokenParams.tokenURI, config.editionSize));
         // callSale
         setupActions[1] = abi.encodeCall(IZoraCreator1155.callSale, (1, config.minter, minterData));
         // updateRoyaltiesForToken
@@ -239,7 +233,7 @@ contract AgoraNounsGovernor is
         );
 
         // createContract
-        targets[0] = address(zoraNFTCreator1155);
+        targets[0] = address(zoraCreator1155Factory);
         calldatas[0] = abi.encodeCall(
             IZoraCreator1155Factory.createContract,
             (
@@ -250,8 +244,6 @@ contract AgoraNounsGovernor is
                 setupActions
             )
         );
-
-        // TODO: Set splits
     }
 
     function _encodeExisting1155Data(
@@ -271,7 +263,7 @@ contract AgoraNounsGovernor is
                 saleEnd: publicSaleStart + config.publicSaleDuration,
                 maxTokensPerAddress: 0,
                 pricePerToken: config.publicSalePrice,
-                fundsRecipient: params.fundsRecipient
+                fundsRecipient: payable(address(0)) // recipient, TODO: Set split to params.fundsRecipient, with config.fundsRecipientSplit
             })
         );
         uint256 tokenId = IZoraCreator1155(droposalParams.nftCollection).nextTokenId();
@@ -295,8 +287,6 @@ contract AgoraNounsGovernor is
         calldatas[2] = abi.encodeCall(
             IZoraCreator1155.updateRoyaltiesForToken, (tokenId, _royaltyConfiguration(params.royaltyBPS))
         );
-
-        // TODO: Set splits
     }
 
     // TODO: Check
