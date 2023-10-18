@@ -11,6 +11,7 @@ import {GovernorVotesUpgradeableV1, IVotesUpgradeable} from "src/lib/openzeppeli
 import {IZoraCreator721, IERC721Drop} from "src/interfaces/IZoraCreator721.sol";
 import {IZoraCreator1155, RoyaltyConfiguration} from "src/interfaces/IZoraCreator1155.sol";
 import {IZoraCreator1155Factory} from "src/interfaces/IZoraCreator1155Factory.sol";
+import {ISliceCore, Payee, SliceParams} from "src/interfaces/ISliceCore.sol";
 import {
     DroposalParams, NFTType, ERC721Params, ERC1155Params, ERC1155TokenParams
 } from "src/structs/DroposalParams.sol";
@@ -67,10 +68,15 @@ contract AgoraNounsGovernor is
                            IMMUTABLE STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    IGovernorUpgradeable public constant nounsGovernor = IGovernorUpgradeable(address(1));
-    address public constant zoraNFTCreator721 = address(2);
-    IZoraCreator1155Factory public constant zoraCreator1155Factory = IZoraCreator1155Factory(address(3));
-    address public constant FIXED_PRICE_MINTER = address(4);
+    IVotesUpgradeable public constant nounsToken = IVotesUpgradeable(0x9C8fF314C9Bc7F6e59A9d9225Fb22946427eDC03);
+    IGovernorUpgradeable public constant nounsGovernor =
+        IGovernorUpgradeable(0x6f3E6272A167e8AcCb32072d08E0957F9c79223d);
+    address public constant nounsTimelock = 0xf32dd1Bd55bD14d929218499a2E7D106F72f79c7;
+    address public constant zoraNFTCreator721 = 0xF74B146ce44CC162b601deC3BE331784DB111DC1;
+    IZoraCreator1155Factory public constant zoraCreator1155Factory =
+        IZoraCreator1155Factory(0xA6C5f2DE915240270DaC655152C3f6A91748cb85);
+    address public constant FIXED_PRICE_MINTER = 0x04E2516A2c207E84a1839755675dfd8eF6302F0a;
+    ISliceCore public constant slice = ISliceCore(0x21da1b084175f95285B49b22C018889c45E1820d);
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
@@ -99,7 +105,7 @@ contract AgoraNounsGovernor is
         _disableInitializers();
     }
 
-    function initialize(IVotesUpgradeable nounsToken) public initializer {
+    function initialize() public initializer {
         __Governor_init("Agora Nouns Governor");
         __GovernorSettings_init(7200, /* 1 day */ 50400, /* 1 week */ 0);
         __GovernorCountingSimple_init();
@@ -164,7 +170,6 @@ contract AgoraNounsGovernor is
 
     function _encode721Data(uint64 publicSaleStart, DroposalParams memory droposalParams, DroposalConfig memory config)
         internal
-        view
         returns (address[] memory targets, uint256[] memory values, bytes[] memory calldatas)
     {
         (ERC721Params memory params) = abi.decode(droposalParams.nftParams, (ERC721Params));
@@ -172,6 +177,8 @@ contract AgoraNounsGovernor is
         targets = new address[](1);
         values = new uint256[](1);
         calldatas = new bytes[](1);
+
+        _createSlice(params.fundsRecipient, config.fundsRecipientSplit);
 
         targets[0] = zoraNFTCreator721;
         calldatas[0] = abi.encodeCall(
@@ -181,7 +188,7 @@ contract AgoraNounsGovernor is
                 params.symbol,
                 config.editionSize,
                 params.royaltyBPS,
-                payable(address(0)), // )recipient, TODO: Set split to params.fundsRecipient, with config.fundsRecipientSplit
+                payable(slice.slicers(slice.supply())),
                 msg.sender, // defaultAdmin
                 IERC721Drop.SalesConfiguration({
                     publicSalePrice: config.publicSalePrice,
@@ -202,7 +209,6 @@ contract AgoraNounsGovernor is
 
     function _encode1155Data(uint64 publicSaleStart, DroposalParams memory droposalParams, DroposalConfig memory config)
         internal
-        view
         returns (address[] memory targets, uint256[] memory values, bytes[] memory calldatas)
     {
         (ERC1155Params memory params) = abi.decode(droposalParams.nftParams, (ERC1155Params));
@@ -217,7 +223,7 @@ contract AgoraNounsGovernor is
                 saleEnd: publicSaleStart + config.publicSaleDuration,
                 maxTokensPerAddress: 0,
                 pricePerToken: config.publicSalePrice,
-                fundsRecipient: payable(address(0)) // recipient, TODO: Set split to params.tokenParams.fundsRecipient, with config.fundsRecipientSplit
+                fundsRecipient: payable(slice.slicers(slice.supply()))
             })
         );
 
@@ -231,6 +237,8 @@ contract AgoraNounsGovernor is
         setupActions[2] = abi.encodeCall(
             IZoraCreator1155.updateRoyaltiesForToken, (1, _royaltyConfiguration(params.tokenParams.royaltyBPS))
         );
+
+        _createSlice(params.tokenParams.fundsRecipient, config.fundsRecipientSplit);
 
         // createContract
         targets[0] = address(zoraCreator1155Factory);
@@ -250,7 +258,7 @@ contract AgoraNounsGovernor is
         uint64 publicSaleStart,
         DroposalParams memory droposalParams,
         DroposalConfig memory config
-    ) internal view returns (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) {
+    ) internal returns (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) {
         (ERC1155TokenParams memory params) = abi.decode(droposalParams.nftParams, (ERC1155TokenParams));
 
         targets = new address[](3);
@@ -263,10 +271,13 @@ contract AgoraNounsGovernor is
                 saleEnd: publicSaleStart + config.publicSaleDuration,
                 maxTokensPerAddress: 0,
                 pricePerToken: config.publicSalePrice,
-                fundsRecipient: payable(address(0)) // recipient, TODO: Set split to params.fundsRecipient, with config.fundsRecipientSplit
+                fundsRecipient: payable(slice.slicers(slice.supply()))
             })
         );
         uint256 tokenId = IZoraCreator1155(droposalParams.nftCollection).nextTokenId();
+
+        // TODO: Test slicer id is correct
+        _createSlice(params.fundsRecipient, config.fundsRecipientSplit);
 
         // setupNewToken
         targets[0] = droposalParams.nftCollection;
@@ -293,6 +304,29 @@ contract AgoraNounsGovernor is
     function _royaltyConfiguration(uint256 royaltyBPS) internal view returns (RoyaltyConfiguration memory) {
         return
             RoyaltyConfiguration({royaltyMintSchedule: 0, royaltyBPS: uint32(royaltyBPS), royaltyRecipient: msg.sender});
+    }
+
+    function _createSlice(address recipient, uint32 split) internal {
+        Payee[] memory payees = new Payee[](2);
+        payees[0] = Payee({account: recipient, shares: split, transfersAllowedWhileLocked: false});
+        payees[1] = Payee({account: nounsTimelock, shares: 10000 - split, transfersAllowedWhileLocked: false});
+
+        // TODO: What currencies should it accept?
+        // address[] memory currencies = new address[](0);
+        // currencies[0] = address(usdc);
+
+        slice.slice(
+            SliceParams({
+                payees: payees,
+                minimumShares: 5001,
+                currencies: new address[](0),
+                releaseTimelock: 0,
+                transferTimelock: 0, // TODO: should transfers be locked?
+                controller: recipient,
+                slicerFlags: 1 << 1, // Enable currencies control
+                sliceCoreFlags: 0
+            })
+        );
     }
 
     /*//////////////////////////////////////////////////////////////
