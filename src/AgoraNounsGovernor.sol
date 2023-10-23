@@ -7,11 +7,12 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {GovernorUpgradeableV1, IGovernorUpgradeable} from "src/lib/openzeppelin/v1/GovernorUpgradeable.sol";
 import {GovernorSettingsUpgradeableV1} from "src/lib/openzeppelin/v1/GovernorSettingsUpgradeable.sol";
 import {GovernorCountingSimpleUpgradeableV1} from "src/lib/openzeppelin/v1/GovernorCountingSimpleUpgradeable.sol";
-import {GovernorVotesUpgradeableV1, IVotesUpgradeable} from "src/lib/openzeppelin/v1/GovernorVotesUpgradeable.sol";
+import {GovernorVotesUpgradeableV1, IERC721Checkpointable} from "src/lib/openzeppelin/v1/GovernorVotesUpgradeable.sol";
 import {IZoraCreator721, IERC721Drop} from "src/interfaces/IZoraCreator721.sol";
 import {IZoraCreator1155, RoyaltyConfiguration} from "src/interfaces/IZoraCreator1155.sol";
 import {IZoraCreator1155Factory} from "src/interfaces/IZoraCreator1155Factory.sol";
 import {ISliceCore, Payee, SliceParams} from "src/interfaces/ISliceCore.sol";
+import {ISplitMain} from "src/interfaces/ISplitMain.sol";
 import {
     DroposalParams, NFTType, ERC721Params, ERC1155Params, ERC1155TokenParams
 } from "src/structs/DroposalParams.sol";
@@ -20,26 +21,20 @@ import {FixedPriceMinter_SalesConfig} from "src/structs/FixedPriceMinter_SalesCo
 
 // TODO:
 // - Set initial droposal types
-// - Set addresses for nounsGovernor and zora contracts
-// - Test inherited proposalThreshold
-// --------------
-// Questions:
-// - [Agora] Are the init params set up as intended?
-// - [Agora] Use Slice for splits?
-// - [zora] Check if create edition / mint logic is correct
+// - Test
 
-// Features:
-// - `dropose`: Format proposal for a drop, either new ERC721, new ERC1155, or existing ERC1155
-// - `proposeDroposalType`: Propose a new droposal type to be approved by contract owner
-// - `setDroposalType`: Allows owner to set a droposal types.
-// - `approveDroposalType`: Allows owner to approve a pending droposal type.
-// - Allow only proposer to execute.
-// - Inherit quorum and proposalThreshold from main Nouns governor.
-
-/// @title Agora Nouns Governor
-/// @notice Governor to handle the creation of droposals.
-/// @author jacopo@dlabs.app
-/// @author kent@voteagora.com
+/**
+ * @title Agora Nouns Governor
+ * @notice Governor to handle the creation of droposals.
+ *
+ * Features:
+ * - `dropose`: Format proposal for a drop, either new ERC721, new ERC1155, or existing ERC1155
+ * - `proposeDroposalType`: Propose a new droposal type to be approved by contract owner
+ * - `setDroposalType`: Allows owner to set a droposal types.
+ * - `approveDroposalType`: Allows owner to approve a pending droposal type.
+ * - Allow only proposer to execute.
+ * - Inherit quorum and proposalThreshold from main Nouns governor.
+ */
 contract AgoraNounsGovernor is
     UUPSUpgradeable,
     OwnableUpgradeable,
@@ -68,15 +63,18 @@ contract AgoraNounsGovernor is
                            IMMUTABLE STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    IVotesUpgradeable public constant nounsToken = IVotesUpgradeable(0x9C8fF314C9Bc7F6e59A9d9225Fb22946427eDC03);
+    IERC721Checkpointable public constant nounsToken = IERC721Checkpointable(0x9C8fF314C9Bc7F6e59A9d9225Fb22946427eDC03);
     IGovernorUpgradeable public constant nounsGovernor =
         IGovernorUpgradeable(0x6f3E6272A167e8AcCb32072d08E0957F9c79223d);
-    address public constant nounsTimelock = 0xf32dd1Bd55bD14d929218499a2E7D106F72f79c7;
+    address public constant nounsReceiver = 0x2e234DAe75C793f67A35089C9d99245E1C58470b;
     address public constant zoraNFTCreator721 = 0xF74B146ce44CC162b601deC3BE331784DB111DC1;
     IZoraCreator1155Factory public constant zoraCreator1155Factory =
-        IZoraCreator1155Factory(0xA6C5f2DE915240270DaC655152C3f6A91748cb85);
+        IZoraCreator1155Factory(0x777777C338d93e2C7adf08D102d45CA7CC4Ed021);
     address public constant FIXED_PRICE_MINTER = 0x04E2516A2c207E84a1839755675dfd8eF6302F0a;
     ISliceCore public constant slice = ISliceCore(0x21da1b084175f95285B49b22C018889c45E1820d);
+    ISplitMain public constant splitMain = ISplitMain(0x2ed6c4B5dA6378c7897AC67Ba9e43102Feb694EE);
+
+    uint32 private constant SPLIT_PERCENTAGE_SCALE = 1e6;
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
@@ -120,7 +118,7 @@ contract AgoraNounsGovernor is
                 editionSize: 1_000,
                 publicSalePrice: 0.03 ether,
                 publicSaleDuration: 3 days,
-                fundsRecipientSplit: 4_000,
+                fundsRecipientSplit: 400_000,
                 minter: FIXED_PRICE_MINTER
             })
         );
@@ -130,8 +128,8 @@ contract AgoraNounsGovernor is
                 name: "Premium",
                 editionSize: 3_000,
                 publicSalePrice: 0.069 ether,
-                publicSaleDuration: 3 days,
-                fundsRecipientSplit: 4_000,
+                publicSaleDuration: 2 days,
+                fundsRecipientSplit: 300_000,
                 minter: FIXED_PRICE_MINTER
             })
         );
@@ -178,8 +176,6 @@ contract AgoraNounsGovernor is
         values = new uint256[](1);
         calldatas = new bytes[](1);
 
-        _createSlice(params.fundsRecipient, config.fundsRecipientSplit);
-
         targets[0] = zoraNFTCreator721;
         calldatas[0] = abi.encodeCall(
             IZoraCreator721.createEditionWithReferral,
@@ -188,7 +184,7 @@ contract AgoraNounsGovernor is
                 params.symbol,
                 config.editionSize,
                 params.royaltyBPS,
-                payable(slice.slicers(slice.supply())),
+                _createSplit(params.fundsRecipient, config.fundsRecipientSplit),
                 msg.sender, // defaultAdmin
                 IERC721Drop.SalesConfiguration({
                     publicSalePrice: config.publicSalePrice,
@@ -223,7 +219,7 @@ contract AgoraNounsGovernor is
                 saleEnd: publicSaleStart + config.publicSaleDuration,
                 maxTokensPerAddress: 0,
                 pricePerToken: config.publicSalePrice,
-                fundsRecipient: payable(slice.slicers(slice.supply()))
+                fundsRecipient: _createSplit(params.tokenParams.fundsRecipient, config.fundsRecipientSplit)
             })
         );
 
@@ -237,8 +233,6 @@ contract AgoraNounsGovernor is
         setupActions[2] = abi.encodeCall(
             IZoraCreator1155.updateRoyaltiesForToken, (1, _royaltyConfiguration(params.tokenParams.royaltyBPS))
         );
-
-        _createSlice(params.tokenParams.fundsRecipient, config.fundsRecipientSplit);
 
         // createContract
         targets[0] = address(zoraCreator1155Factory);
@@ -271,13 +265,10 @@ contract AgoraNounsGovernor is
                 saleEnd: publicSaleStart + config.publicSaleDuration,
                 maxTokensPerAddress: 0,
                 pricePerToken: config.publicSalePrice,
-                fundsRecipient: payable(slice.slicers(slice.supply()))
+                fundsRecipient: _createSplit(params.fundsRecipient, config.fundsRecipientSplit)
             })
         );
         uint256 tokenId = IZoraCreator1155(droposalParams.nftCollection).nextTokenId();
-
-        // TODO: Test slicer id is correct
-        _createSlice(params.fundsRecipient, config.fundsRecipientSplit);
 
         // setupNewToken
         targets[0] = droposalParams.nftCollection;
@@ -300,33 +291,14 @@ contract AgoraNounsGovernor is
         );
     }
 
-    // TODO: Check
+    // TODO: Check royaltyBPS are correct
     function _royaltyConfiguration(uint256 royaltyBPS) internal view returns (RoyaltyConfiguration memory) {
         return
             RoyaltyConfiguration({royaltyMintSchedule: 0, royaltyBPS: uint32(royaltyBPS), royaltyRecipient: msg.sender});
     }
 
-    function _createSlice(address recipient, uint32 split) internal {
-        Payee[] memory payees = new Payee[](2);
-        payees[0] = Payee({account: recipient, shares: split, transfersAllowedWhileLocked: false});
-        payees[1] = Payee({account: nounsTimelock, shares: 10000 - split, transfersAllowedWhileLocked: false});
-
-        // TODO: What currencies should it accept?
-        // address[] memory currencies = new address[](0);
-        // currencies[0] = address(usdc);
-
-        slice.slice(
-            SliceParams({
-                payees: payees,
-                minimumShares: 5001,
-                currencies: new address[](0),
-                releaseTimelock: 0,
-                transferTimelock: 0, // TODO: should transfers be locked?
-                controller: recipient,
-                slicerFlags: 1 << 1, // Enable currencies control
-                sliceCoreFlags: 0
-            })
-        );
+    function _createSplit(address recipient, uint32 split) internal returns (address payable) {
+        return _createSplitMain(recipient, split);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -390,6 +362,50 @@ contract AgoraNounsGovernor is
     /*//////////////////////////////////////////////////////////////
                                   OTHER
     //////////////////////////////////////////////////////////////*/
+
+    function _createSplitSlice(address recipient, uint32 split) internal returns (address payable) {
+        Payee[] memory payees = new Payee[](2);
+        payees[0] = Payee({account: recipient, shares: split, transfersAllowedWhileLocked: false});
+        payees[1] = Payee({account: nounsReceiver, shares: 10000 - split, transfersAllowedWhileLocked: false});
+
+        // TODO: What currencies should it accept?
+        // address[] memory currencies = new address[](0);
+        // currencies[0] = address(usdc);
+
+        slice.slice(
+            SliceParams({
+                payees: payees,
+                minimumShares: 5001,
+                currencies: new address[](0),
+                releaseTimelock: 0,
+                transferTimelock: 0, // TODO: should transfers be locked?
+                controller: recipient,
+                slicerFlags: 1 << 1, // Enable currencies control
+                sliceCoreFlags: 0
+            })
+        );
+
+        // TODO: Test slicer id is correct in encode1155
+
+        return payable(slice.slicers(slice.supply()));
+    }
+
+    function _createSplitMain(address recipient, uint32 split) internal returns (address payable) {
+        address[] memory accounts = new address[](2);
+        accounts[0] = recipient;
+        accounts[1] = address(nounsGovernor);
+
+        uint32[] memory percentAllocations = new uint32[](2);
+        percentAllocations[0] = split;
+        percentAllocations[1] = SPLIT_PERCENTAGE_SCALE - split;
+
+        return splitMain.createSplit(
+            accounts,
+            percentAllocations,
+            0, // distributorFee
+            address(0) // controller
+        );
+    }
 
     /// Getter for proposals.
     function proposals(uint256 proposalId) public view returns (ProposalCore memory proposal) {
