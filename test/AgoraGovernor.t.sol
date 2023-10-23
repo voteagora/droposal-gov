@@ -3,7 +3,9 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 import {AgoraNounsGovernor, AgoraNounsGovernorMock} from "./mocks/AgoraNounsGovernorMock.sol";
-import {IVotesUpgradeable} from "src/lib/openzeppelin/v1/GovernorVotesUpgradeable.sol";
+import {AgoraNounsGovernorSepolia, AgoraNounsGovernorSepoliaMock} from "./mocks/AgoraNounsGovernorSepoliaMock.sol";
+import {NounsReceiver} from "./mocks/NounsReceiver.sol";
+import {IERC721Checkpointable} from "src/lib/openzeppelin/v1/GovernorVotesUpgradeable.sol";
 import {IGovernorUpgradeable} from "src/lib/openzeppelin/v1/GovernorUpgradeable.sol";
 import {IZoraCreator1155Factory} from "src/interfaces/IZoraCreator1155Factory.sol";
 import {ISliceCore, Payee, SliceParams} from "src/interfaces/ISliceCore.sol";
@@ -13,7 +15,7 @@ import {
 } from "src/structs/DroposalParams.sol";
 
 contract AgoraGovernorTest is Test {
-    IVotesUpgradeable public constant nounsToken = IVotesUpgradeable(0x9C8fF314C9Bc7F6e59A9d9225Fb22946427eDC03);
+    IERC721Checkpointable public constant nounsToken = IERC721Checkpointable(0x9C8fF314C9Bc7F6e59A9d9225Fb22946427eDC03);
     IGovernorUpgradeable public constant nounsGovernor =
         IGovernorUpgradeable(0x6f3E6272A167e8AcCb32072d08E0957F9c79223d);
     address public constant nounsTimelock = 0xb1a32FC9F9D8b2cf86C068Cae13108809547ef71;
@@ -22,13 +24,16 @@ contract AgoraGovernorTest is Test {
         IZoraCreator1155Factory(0xA6C5f2DE915240270DaC655152C3f6A91748cb85);
     address public constant FIXED_PRICE_MINTER = 0x04E2516A2c207E84a1839755675dfd8eF6302F0a;
     ISliceCore public constant slice = ISliceCore(0x21da1b084175f95285B49b22C018889c45E1820d);
+    address public constant nouner = 0x008c84421dA5527F462886cEc43D2717B686A7e4;
 
     AgoraNounsGovernorMock governor;
+    address receiver;
 
     function setUp() public {
         vm.createSelectFork(vm.envString("RPC_URL_MAINNET"), 18380477);
 
         address implementation = address(new AgoraNounsGovernorMock());
+        receiver = address(new NounsReceiver());
 
         bytes memory data = abi.encodeCall(AgoraNounsGovernor.initialize, ());
         governor = AgoraNounsGovernorMock(payable(address(new ERC1967Proxy(implementation, data))));
@@ -45,6 +50,38 @@ contract AgoraGovernorTest is Test {
     }
 
     function testDropose() public {
+        vm.prank(nouner);
+        governor.dropose(
+            DroposalParams({
+                droposalType: 0,
+                nftType: NFTType.ERC721,
+                nftCollection: address(0),
+                proposalDescription: "TestProp",
+                nftParams: abi.encode(
+                    ERC721Params({
+                        name: "Test721",
+                        symbol: "TST",
+                        royaltyBPS: 0,
+                        fundsRecipient: payable(address(1)),
+                        imageURI: "ipfs://Qm",
+                        animationURI: "",
+                        description: ""
+                    })
+                    )
+            })
+        );
+    }
+
+    function testDroposeSepolia() public {
+        vm.createSelectFork(vm.envString("RPC_URL_SEPOLIA"), 4548735);
+
+        address implementation = address(new AgoraNounsGovernorSepoliaMock());
+        receiver = address(new NounsReceiver());
+
+        bytes memory data = abi.encodeCall(AgoraNounsGovernorSepolia.initialize, ());
+        governor = AgoraNounsGovernorMock(payable(address(new ERC1967Proxy(implementation, data))));
+
+        vm.prank(0xEA64B234316728f1BFd3b7cDCc1EAf0066D8E055);
         governor.dropose(
             DroposalParams({
                 droposalType: 0,

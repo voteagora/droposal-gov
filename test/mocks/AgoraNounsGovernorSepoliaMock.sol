@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.0;
 
-import {AgoraNounsGovernor} from "src/AgoraNounsGovernor.sol";
+import {AgoraNounsGovernorSepolia} from "./AgoraNounsGovernorSepolia.sol";
 import {
     DroposalParams, NFTType, ERC721Params, ERC1155Params, ERC1155TokenParams
 } from "src/structs/DroposalParams.sol";
 import {DroposalConfig} from "src/structs/DroposalConfig.sol";
 
-contract AgoraNounsGovernorMock is AgoraNounsGovernor {
+contract AgoraNounsGovernorSepoliaMock is AgoraNounsGovernorSepolia {
     function getDroposalType(uint256 droposalTypeId) public view returns (DroposalConfig memory) {
         return droposalTypes[droposalTypeId];
     }
