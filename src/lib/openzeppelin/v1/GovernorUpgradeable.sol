@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.9.1) (governance/Governor.sol)
+// OpenZeppelin Contracts (last updated v4.8.0) (governance/Governor.sol)
 
 pragma solidity ^0.8.0;
 
@@ -15,6 +15,7 @@ import {DoubleEndedQueueUpgradeable} from
     "@openzeppelin/contracts-upgradeable/utils/structs/DoubleEndedQueueUpgradeable.sol";
 import {AddressUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
 import {ContextUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
+import {TimersUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/TimersUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/governance/IGovernorUpgradeable.sol";
 
@@ -32,29 +33,23 @@ abstract contract GovernorUpgradeableV1 is
     IERC1155ReceiverUpgradeable
 {
     using DoubleEndedQueueUpgradeable for DoubleEndedQueueUpgradeable.Bytes32Deque;
+    using SafeCastUpgradeable for uint256;
+    using TimersUpgradeable for TimersUpgradeable.BlockNumber;
 
     bytes32 public constant BALLOT_TYPEHASH = keccak256("Ballot(uint256 proposalId,uint8 support)");
     bytes32 public constant EXTENDED_BALLOT_TYPEHASH =
         keccak256("ExtendedBallot(uint256 proposalId,uint8 support,string reason,bytes params)");
 
-    // solhint-disable var-name-mixedcase
     struct ProposalCore {
-        // --- start retyped from Timers.BlockNumber at offset 0x00 ---
-        uint64 voteStart;
-        address proposer;
-        bytes4 __gap_unused0;
-        // --- start retyped from Timers.BlockNumber at offset 0x20 ---
-        uint64 voteEnd;
-        bytes24 __gap_unused1;
-        // --- Remaining fields starting at offset 0x40 ---------------
+        TimersUpgradeable.BlockNumber voteStart;
+        TimersUpgradeable.BlockNumber voteEnd;
         bool executed;
         bool canceled;
+        address proposer;
     }
-    // solhint-enable var-name-mixedcase
 
     string private _name;
 
-    /// @custom:oz-retyped-from mapping(uint256 => Governor.ProposalCore)
     mapping(uint256 => ProposalCore) internal _proposals;
 
     // This queue keeps track of the governor operating on itself. Calls to functions protected by the
@@ -99,7 +94,7 @@ abstract contract GovernorUpgradeableV1 is
      * @dev Function to receive ETH that will be handled by the governor (disabled if executor is a third party contract)
      */
     receive() external payable virtual {
-        require(_executor() == address(this), "Governor: must send to executor");
+        require(_executor() == address(this));
     }
 
     /**
@@ -112,22 +107,13 @@ abstract contract GovernorUpgradeableV1 is
         override(IERC165Upgradeable, ERC165Upgradeable)
         returns (bool)
     {
-        bytes4 governorCancelId = this.cancel.selector ^ this.proposalProposer.selector;
-
-        bytes4 governorParamsId = this.castVoteWithReasonAndParams.selector
-            ^ this.castVoteWithReasonAndParamsBySig.selector ^ this.getVotesWithParams.selector;
-
-        // The original interface id in v4.3.
-        bytes4 governor43Id = type(IGovernorUpgradeable).interfaceId ^ type(IERC6372Upgradeable).interfaceId
-            ^ governorCancelId ^ governorParamsId;
-
-        // An updated interface id in v4.6, with params added.
-        bytes4 governor46Id =
-            type(IGovernorUpgradeable).interfaceId ^ type(IERC6372Upgradeable).interfaceId ^ governorCancelId;
-
-        // For the updated interface id in v4.9, we use governorCancelId directly.
-
-        return interfaceId == governor43Id || interfaceId == governor46Id || interfaceId == governorCancelId
+        // In addition to the current interfaceId, also support previous version of the interfaceId that did not
+        // include the castVoteWithReasonAndParams() function as standard
+        return interfaceId
+            == (
+                type(IGovernorUpgradeable).interfaceId ^ this.castVoteWithReasonAndParams.selector
+                    ^ this.castVoteWithReasonAndParamsBySig.selector ^ this.getVotesWithParams.selector
+            ) || interfaceId == type(IGovernorUpgradeable).interfaceId
             || interfaceId == type(IERC1155ReceiverUpgradeable).interfaceId || super.supportsInterface(interfaceId);
     }
 
@@ -187,15 +173,13 @@ abstract contract GovernorUpgradeableV1 is
             revert("Governor: unknown proposal id");
         }
 
-        uint256 currentTimepoint = clock();
-
-        if (snapshot >= currentTimepoint) {
+        if (snapshot >= block.number) {
             return ProposalState.Pending;
         }
 
         uint256 deadline = proposalDeadline(proposalId);
 
-        if (deadline >= currentTimepoint) {
+        if (deadline >= block.number) {
             return ProposalState.Active;
         }
 
@@ -207,31 +191,24 @@ abstract contract GovernorUpgradeableV1 is
     }
 
     /**
-     * @dev Part of the Governor Bravo's interface: _"The number of votes required in order for a voter to become a proposer"_.
-     */
-    function proposalThreshold() public view virtual returns (uint256) {
-        return 0;
-    }
-
-    /**
      * @dev See {IGovernor-proposalSnapshot}.
      */
     function proposalSnapshot(uint256 proposalId) public view virtual override returns (uint256) {
-        return _proposals[proposalId].voteStart;
+        return _proposals[proposalId].voteStart.getDeadline();
     }
 
     /**
      * @dev See {IGovernor-proposalDeadline}.
      */
     function proposalDeadline(uint256 proposalId) public view virtual override returns (uint256) {
-        return _proposals[proposalId].voteEnd;
+        return _proposals[proposalId].voteEnd.getDeadline();
     }
 
     /**
-     * @dev Returns the account that created a given proposal.
+     * @dev Part of the Governor Bravo's interface: _"The number of votes required in order for a voter to become a proposer"_.
      */
-    function proposalProposer(uint256 proposalId) public view virtual override returns (address) {
-        return _proposals[proposalId].proposer;
+    function proposalThreshold() public view virtual returns (uint256) {
+        return 0;
     }
 
     /**
@@ -245,9 +222,9 @@ abstract contract GovernorUpgradeableV1 is
     function _voteSucceeded(uint256 proposalId) internal view virtual returns (bool);
 
     /**
-     * @dev Get the voting weight of `account` at a specific `timepoint`, for a vote as described by `params`.
+     * @dev Get the voting weight of `account` at a specific `blockNumber`, for a vote as described by `params`.
      */
-    function _getVotes(address account, uint256 timepoint, bytes memory params)
+    function _getVotes(address account, uint256 blockNumber, bytes memory params)
         internal
         view
         virtual
@@ -273,7 +250,7 @@ abstract contract GovernorUpgradeableV1 is
     }
 
     /**
-     * @dev See {IGovernor-propose}. This function has opt-in frontrunning protection, described in {_isValidDescriptionForProposer}.
+     * @dev See {IGovernor-propose}.
      */
     function propose(
         address[] memory targets,
@@ -282,11 +259,9 @@ abstract contract GovernorUpgradeableV1 is
         string memory description
     ) public virtual override returns (uint256) {
         address proposer = _msgSender();
-        require(_isValidDescriptionForProposer(proposer, description), "Governor: proposer restricted");
 
-        uint256 currentTimepoint = clock();
         require(
-            getVotes(proposer, currentTimepoint - 1) >= proposalThreshold(),
+            getVotes(proposer, block.number - 1) >= proposalThreshold(),
             "Governor: proposer votes below proposal threshold"
         );
 
@@ -295,20 +270,16 @@ abstract contract GovernorUpgradeableV1 is
         require(targets.length == values.length, "Governor: invalid proposal length");
         require(targets.length == calldatas.length, "Governor: invalid proposal length");
         require(targets.length > 0, "Governor: empty proposal");
-        require(_proposals[proposalId].voteStart == 0, "Governor: proposal already exists");
 
-        uint256 snapshot = currentTimepoint + votingDelay();
-        uint256 deadline = snapshot + votingPeriod();
+        ProposalCore storage proposal = _proposals[proposalId];
+        require(proposal.voteStart.isUnset(), "Governor: proposal already exists");
 
-        _proposals[proposalId] = ProposalCore({
-            proposer: proposer,
-            voteStart: SafeCastUpgradeable.toUint64(snapshot),
-            voteEnd: SafeCastUpgradeable.toUint64(deadline),
-            executed: false,
-            canceled: false,
-            __gap_unused0: 0,
-            __gap_unused1: 0
-        });
+        uint64 snapshot = block.number.toUint64() + votingDelay().toUint64();
+        uint64 deadline = snapshot + votingPeriod().toUint64();
+
+        proposal.voteStart.setDeadline(snapshot);
+        proposal.voteEnd.setDeadline(deadline);
+        proposal.proposer = proposer;
 
         emit ProposalCreated(
             proposalId,
@@ -336,10 +307,9 @@ abstract contract GovernorUpgradeableV1 is
     ) public payable virtual override returns (uint256) {
         uint256 proposalId = hashProposal(targets, values, calldatas, descriptionHash);
 
-        ProposalState currentState = state(proposalId);
+        ProposalState status = state(proposalId);
         require(
-            currentState == ProposalState.Succeeded || currentState == ProposalState.Queued,
-            "Governor: proposal not successful"
+            status == ProposalState.Succeeded || status == ProposalState.Queued, "Governor: proposal not successful"
         );
         _proposals[proposalId].executed = true;
 
@@ -350,21 +320,6 @@ abstract contract GovernorUpgradeableV1 is
         _afterExecute(proposalId, targets, values, calldatas, descriptionHash);
 
         return proposalId;
-    }
-
-    /**
-     * @dev See {IGovernor-cancel}.
-     */
-    function cancel(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
-        bytes32 descriptionHash
-    ) public virtual override returns (uint256) {
-        uint256 proposalId = hashProposal(targets, values, calldatas, descriptionHash);
-        require(state(proposalId) == ProposalState.Pending, "Governor: too late to cancel");
-        require(_msgSender() == _proposals[proposalId].proposer, "Governor: only proposer can cancel");
-        return _cancel(targets, values, calldatas, descriptionHash);
     }
 
     /**
@@ -433,12 +388,10 @@ abstract contract GovernorUpgradeableV1 is
         bytes32 descriptionHash
     ) internal virtual returns (uint256) {
         uint256 proposalId = hashProposal(targets, values, calldatas, descriptionHash);
-
-        ProposalState currentState = state(proposalId);
+        ProposalState status = state(proposalId);
 
         require(
-            currentState != ProposalState.Canceled && currentState != ProposalState.Expired
-                && currentState != ProposalState.Executed,
+            status != ProposalState.Canceled && status != ProposalState.Expired && status != ProposalState.Executed,
             "Governor: proposal not active"
         );
         _proposals[proposalId].canceled = true;
@@ -451,21 +404,21 @@ abstract contract GovernorUpgradeableV1 is
     /**
      * @dev See {IGovernor-getVotes}.
      */
-    function getVotes(address account, uint256 timepoint) public view virtual override returns (uint256) {
-        return _getVotes(account, timepoint, _defaultParams());
+    function getVotes(address account, uint256 blockNumber) public view virtual override returns (uint256) {
+        return _getVotes(account, blockNumber, _defaultParams());
     }
 
     /**
      * @dev See {IGovernor-getVotesWithParams}.
      */
-    function getVotesWithParams(address account, uint256 timepoint, bytes memory params)
+    function getVotesWithParams(address account, uint256 blockNumber, bytes memory params)
         public
         view
         virtual
         override
         returns (uint256)
     {
-        return _getVotes(account, timepoint, params);
+        return _getVotes(account, blockNumber, params);
     }
 
     /**
@@ -573,7 +526,7 @@ abstract contract GovernorUpgradeableV1 is
         ProposalCore storage proposal = _proposals[proposalId];
         require(state(proposalId) == ProposalState.Active, "Governor: vote not currently active");
 
-        uint256 weight = _getVotes(account, proposal.voteStart, params);
+        uint256 weight = _getVotes(account, proposal.voteStart.getDeadline(), params);
         _countVote(proposalId, account, support, weight, params);
 
         if (params.length == 0) {
@@ -633,93 +586,6 @@ abstract contract GovernorUpgradeableV1 is
         returns (bytes4)
     {
         return this.onERC1155BatchReceived.selector;
-    }
-
-    /**
-     * @dev Check if the proposer is authorized to submit a proposal with the given description.
-     *
-     * If the proposal description ends with `#proposer=0x???`, where `0x???` is an address written as a hex string
-     * (case insensitive), then the submission of this proposal will only be authorized to said address.
-     *
-     * This is used for frontrunning protection. By adding this pattern at the end of their proposal, one can ensure
-     * that no other address can submit the same proposal. An attacker would have to either remove or change that part,
-     * which would result in a different proposal id.
-     *
-     * If the description does not match this pattern, it is unrestricted and anyone can submit it. This includes:
-     * - If the `0x???` part is not a valid hex string.
-     * - If the `0x???` part is a valid hex string, but does not contain exactly 40 hex digits.
-     * - If it ends with the expected suffix followed by newlines or other whitespace.
-     * - If it ends with some other similar suffix, e.g. `#other=abc`.
-     * - If it does not end with any such suffix.
-     */
-    function _isValidDescriptionForProposer(address proposer, string memory description)
-        internal
-        view
-        virtual
-        returns (bool)
-    {
-        uint256 len = bytes(description).length;
-
-        // Length is too short to contain a valid proposer suffix
-        if (len < 52) {
-            return true;
-        }
-
-        // Extract what would be the `#proposer=0x` marker beginning the suffix
-        bytes12 marker;
-        assembly {
-            // - Start of the string contents in memory = description + 32
-            // - First character of the marker = len - 52
-            //   - Length of "#proposer=0x0000000000000000000000000000000000000000" = 52
-            // - We read the memory word starting at the first character of the marker:
-            //   - (description + 32) + (len - 52) = description + (len - 20)
-            // - Note: Solidity will ignore anything past the first 12 bytes
-            marker := mload(add(description, sub(len, 20)))
-        }
-
-        // If the marker is not found, there is no proposer suffix to check
-        if (marker != bytes12("#proposer=0x")) {
-            return true;
-        }
-
-        // Parse the 40 characters following the marker as uint160
-        uint160 recovered = 0;
-        for (uint256 i = len - 40; i < len; ++i) {
-            (bool isHex, uint8 value) = _tryHexToUint(bytes(description)[i]);
-            // If any of the characters is not a hex digit, ignore the suffix entirely
-            if (!isHex) {
-                return true;
-            }
-            recovered = (recovered << 4) | value;
-        }
-
-        return recovered == uint160(proposer);
-    }
-
-    /**
-     * @dev Try to parse a character from a string as a hex value. Returns `(true, value)` if the char is in
-     * `[0-9a-fA-F]` and `(false, 0)` otherwise. Value is guaranteed to be in the range `0 <= value < 16`
-     */
-    function _tryHexToUint(bytes1 char) private pure returns (bool, uint8) {
-        uint8 c = uint8(char);
-        unchecked {
-            // Case 0-9
-            if (47 < c && c < 58) {
-                return (true, c - 48);
-            }
-            // Case A-F
-            else if (64 < c && c < 71) {
-                return (true, c - 55);
-            }
-            // Case a-f
-            else if (96 < c && c < 103) {
-                return (true, c - 87);
-            }
-            // Else: not a hex char
-            else {
-                return (false, 0);
-            }
-        }
     }
 
     /**
