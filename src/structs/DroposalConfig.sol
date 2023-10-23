@@ -6,6 +6,6 @@ struct DroposalConfig {
     uint64 editionSize;
     uint96 publicSalePrice;
     uint64 publicSaleDuration;
-    uint16 fundsRecipientSplit;
-    address minter; // TODO: [@Agora] is it always the same, or should be derived from config?
+    uint32 fundsRecipientSplit;
+    address minter; // TODO: is it always the same, or should be derived from config?
 }
