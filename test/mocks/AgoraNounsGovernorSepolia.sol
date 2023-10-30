@@ -11,6 +11,7 @@ import {GovernorVotesUpgradeableV1, IERC721Checkpointable} from "src/lib/openzep
 import {IZoraCreator721, IERC721Drop} from "src/interfaces/IZoraCreator721.sol";
 import {IZoraCreator1155, RoyaltyConfiguration} from "src/interfaces/IZoraCreator1155.sol";
 import {IZoraCreator1155Factory} from "src/interfaces/IZoraCreator1155Factory.sol";
+import {IZoraMinter} from "src/interfaces/IZoraMinter.sol";
 import {ISliceCore, Payee, SliceParams} from "src/interfaces/ISliceCore.sol";
 import {ISplitMain} from "src/interfaces/ISplitMain.sol";
 import {
@@ -19,9 +20,8 @@ import {
 import {DroposalConfig} from "src/structs/DroposalConfig.sol";
 import {FixedPriceMinter_SalesConfig} from "src/structs/FixedPriceMinter_SalesConfig.sol";
 
-// TODO:
-// - Set initial droposal types
-// - Test
+// Updated contract addresses
+// Disabled splits
 
 /**
  * @title Agora Nouns Governor
@@ -83,7 +83,7 @@ contract AgoraNounsGovernorSepolia is
     mapping(uint256 droposalTypeId => DroposalConfig) public droposalTypes;
 
     mapping(uint256 pendingDroposalTypeId => DroposalConfig) public pendingDroposalTypes;
-    uint256 public currentPendingDroposalCount;
+    uint256 public pendingDroposalTypesCount;
 
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
@@ -215,24 +215,30 @@ contract AgoraNounsGovernorSepolia is
         values = new uint256[](1);
         calldatas = new bytes[](1);
 
-        bytes memory minterData = abi.encode(
-            FixedPriceMinter_SalesConfig({
-                saleStart: publicSaleStart,
-                saleEnd: publicSaleStart + config.publicSaleDuration,
-                maxTokensPerAddress: 0,
-                pricePerToken: config.publicSalePrice,
-                fundsRecipient: _createSplit(params.tokenParams.fundsRecipient, config.fundsRecipientSplit)
-            })
+        bytes memory minterData = abi.encodeCall(
+            IZoraMinter(FIXED_PRICE_MINTER).setSale,
+            (
+                1,
+                FixedPriceMinter_SalesConfig({
+                    saleStart: publicSaleStart,
+                    saleEnd: publicSaleStart + config.publicSaleDuration,
+                    maxTokensPerAddress: 0,
+                    pricePerToken: config.publicSalePrice,
+                    fundsRecipient: _createSplit(params.tokenParams.fundsRecipient, config.fundsRecipientSplit)
+                })
+            )
         );
 
-        bytes[] memory setupActions = new bytes[](3);
+        bytes[] memory setupActions = new bytes[](4);
         // setupNewToken
         setupActions[0] =
             abi.encodeCall(IZoraCreator1155.setupNewToken, (params.tokenParams.tokenURI, config.editionSize));
+        // addPermission
+        setupActions[1] = abi.encodeCall(IZoraCreator1155.addPermission, (1, FIXED_PRICE_MINTER, 2 ** 2));
         // callSale
-        setupActions[1] = abi.encodeCall(IZoraCreator1155.callSale, (1, config.minter, minterData));
+        setupActions[2] = abi.encodeCall(IZoraCreator1155.callSale, (1, config.minter, minterData));
         // updateRoyaltiesForToken
-        setupActions[2] = abi.encodeCall(
+        setupActions[3] = abi.encodeCall(
             IZoraCreator1155.updateRoyaltiesForToken, (1, _royaltyConfiguration(params.tokenParams.royaltyBPS))
         );
 
@@ -261,16 +267,21 @@ contract AgoraNounsGovernorSepolia is
         values = new uint256[](3);
         calldatas = new bytes[](3);
 
-        bytes memory minterData = abi.encode(
-            FixedPriceMinter_SalesConfig({
-                saleStart: publicSaleStart,
-                saleEnd: publicSaleStart + config.publicSaleDuration,
-                maxTokensPerAddress: 0,
-                pricePerToken: config.publicSalePrice,
-                fundsRecipient: _createSplit(params.fundsRecipient, config.fundsRecipientSplit)
-            })
-        );
         uint256 tokenId = IZoraCreator1155(droposalParams.nftCollection).nextTokenId();
+
+        bytes memory minterData = abi.encodeCall(
+            IZoraMinter(FIXED_PRICE_MINTER).setSale,
+            (
+                tokenId,
+                FixedPriceMinter_SalesConfig({
+                    saleStart: publicSaleStart,
+                    saleEnd: publicSaleStart + config.publicSaleDuration,
+                    maxTokensPerAddress: 0,
+                    pricePerToken: config.publicSalePrice,
+                    fundsRecipient: _createSplit(params.fundsRecipient, config.fundsRecipientSplit)
+                })
+            )
+        );
 
         // setupNewToken
         targets[0] = droposalParams.nftCollection;
@@ -312,7 +323,7 @@ contract AgoraNounsGovernorSepolia is
     /// Propose a new droposal type to be approved by contract owner.
     function proposeDroposalType(DroposalConfig memory config) public {
         unchecked {
-            uint256 pendingDroposalTypeId = ++currentPendingDroposalCount;
+            uint256 pendingDroposalTypeId = ++pendingDroposalTypesCount;
 
             pendingDroposalTypes[pendingDroposalTypeId] = config;
             emit DroposalTypeProposed(pendingDroposalTypeId, config);
