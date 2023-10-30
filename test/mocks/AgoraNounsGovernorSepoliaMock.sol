@@ -16,8 +16,8 @@ contract AgoraNounsGovernorSepoliaMock is AgoraNounsGovernorSepolia {
         return pendingDroposalTypes[droposalTypeId];
     }
 
-    function getCurrentPendingDroposalCount() public view returns (uint256) {
-        return currentPendingDroposalCount;
+    function getPendingDroposalTypesCount() public view returns (uint256) {
+        return pendingDroposalTypesCount;
     }
 
     function encode721Data(uint64 publicSaleStart, DroposalParams memory droposalParams, DroposalConfig memory config)

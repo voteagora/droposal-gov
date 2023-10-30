@@ -1,5 +1,5 @@
 [profile.default]
-optimizer_runs = 1000
+optimizer_runs = 800
 src = 'src'
 fs_permissions = [{ access = "read", path = "./deployments/"}]
 
