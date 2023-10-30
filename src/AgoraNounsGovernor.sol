@@ -11,6 +11,7 @@ import {GovernorVotesUpgradeableV1, IERC721Checkpointable} from "src/lib/openzep
 import {IZoraCreator721, IERC721Drop} from "src/interfaces/IZoraCreator721.sol";
 import {IZoraCreator1155, RoyaltyConfiguration} from "src/interfaces/IZoraCreator1155.sol";
 import {IZoraCreator1155Factory} from "src/interfaces/IZoraCreator1155Factory.sol";
+import {IZoraMinter} from "src/interfaces/IZoraMinter.sol";
 import {ISliceCore, Payee, SliceParams} from "src/interfaces/ISliceCore.sol";
 import {ISplitMain} from "src/interfaces/ISplitMain.sol";
 import {
@@ -69,7 +70,7 @@ contract AgoraNounsGovernor is
     address public constant nounsReceiver = 0x2e234DAe75C793f67A35089C9d99245E1C58470b;
     address public constant zoraNFTCreator721 = 0xF74B146ce44CC162b601deC3BE331784DB111DC1;
     IZoraCreator1155Factory public constant zoraCreator1155Factory =
-        IZoraCreator1155Factory(0x777777C338d93e2C7adf08D102d45CA7CC4Ed021);
+        IZoraCreator1155Factory(0xA6C5f2DE915240270DaC655152C3f6A91748cb85);
     address public constant FIXED_PRICE_MINTER = 0x04E2516A2c207E84a1839755675dfd8eF6302F0a;
     ISliceCore public constant slice = ISliceCore(0x21da1b084175f95285B49b22C018889c45E1820d);
     ISplitMain public constant splitMain = ISplitMain(0x2ed6c4B5dA6378c7897AC67Ba9e43102Feb694EE);
@@ -83,7 +84,7 @@ contract AgoraNounsGovernor is
     mapping(uint256 droposalTypeId => DroposalConfig) public droposalTypes;
 
     mapping(uint256 pendingDroposalTypeId => DroposalConfig) public pendingDroposalTypes;
-    uint256 public currentPendingDroposalCount;
+    uint256 public pendingDroposalTypesCount;
 
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
@@ -213,24 +214,30 @@ contract AgoraNounsGovernor is
         values = new uint256[](1);
         calldatas = new bytes[](1);
 
-        bytes memory minterData = abi.encode(
-            FixedPriceMinter_SalesConfig({
-                saleStart: publicSaleStart,
-                saleEnd: publicSaleStart + config.publicSaleDuration,
-                maxTokensPerAddress: 0,
-                pricePerToken: config.publicSalePrice,
-                fundsRecipient: _createSplit(params.tokenParams.fundsRecipient, config.fundsRecipientSplit)
-            })
+        bytes memory minterData = abi.encodeCall(
+            IZoraMinter(FIXED_PRICE_MINTER).setSale,
+            (
+                1,
+                FixedPriceMinter_SalesConfig({
+                    saleStart: publicSaleStart,
+                    saleEnd: publicSaleStart + config.publicSaleDuration,
+                    maxTokensPerAddress: 0,
+                    pricePerToken: config.publicSalePrice,
+                    fundsRecipient: _createSplit(params.tokenParams.fundsRecipient, config.fundsRecipientSplit)
+                })
+            )
         );
 
-        bytes[] memory setupActions = new bytes[](3);
+        bytes[] memory setupActions = new bytes[](4);
         // setupNewToken
         setupActions[0] =
             abi.encodeCall(IZoraCreator1155.setupNewToken, (params.tokenParams.tokenURI, config.editionSize));
+        // addPermission
+        setupActions[1] = abi.encodeCall(IZoraCreator1155.addPermission, (1, FIXED_PRICE_MINTER, 2 ** 2));
         // callSale
-        setupActions[1] = abi.encodeCall(IZoraCreator1155.callSale, (1, config.minter, minterData));
+        setupActions[2] = abi.encodeCall(IZoraCreator1155.callSale, (1, config.minter, minterData));
         // updateRoyaltiesForToken
-        setupActions[2] = abi.encodeCall(
+        setupActions[3] = abi.encodeCall(
             IZoraCreator1155.updateRoyaltiesForToken, (1, _royaltyConfiguration(params.tokenParams.royaltyBPS))
         );
 
@@ -259,16 +266,21 @@ contract AgoraNounsGovernor is
         values = new uint256[](3);
         calldatas = new bytes[](3);
 
-        bytes memory minterData = abi.encode(
-            FixedPriceMinter_SalesConfig({
-                saleStart: publicSaleStart,
-                saleEnd: publicSaleStart + config.publicSaleDuration,
-                maxTokensPerAddress: 0,
-                pricePerToken: config.publicSalePrice,
-                fundsRecipient: _createSplit(params.fundsRecipient, config.fundsRecipientSplit)
-            })
-        );
         uint256 tokenId = IZoraCreator1155(droposalParams.nftCollection).nextTokenId();
+
+        bytes memory minterData = abi.encodeCall(
+            IZoraMinter(FIXED_PRICE_MINTER).setSale,
+            (
+                tokenId,
+                FixedPriceMinter_SalesConfig({
+                    saleStart: publicSaleStart,
+                    saleEnd: publicSaleStart + config.publicSaleDuration,
+                    maxTokensPerAddress: 0,
+                    pricePerToken: config.publicSalePrice,
+                    fundsRecipient: _createSplit(params.fundsRecipient, config.fundsRecipientSplit)
+                })
+            )
+        );
 
         // setupNewToken
         targets[0] = droposalParams.nftCollection;
@@ -308,7 +320,7 @@ contract AgoraNounsGovernor is
     /// Propose a new droposal type to be approved by contract owner.
     function proposeDroposalType(DroposalConfig memory config) public {
         unchecked {
-            uint256 pendingDroposalTypeId = ++currentPendingDroposalCount;
+            uint256 pendingDroposalTypeId = ++pendingDroposalTypesCount;
 
             pendingDroposalTypes[pendingDroposalTypeId] = config;
             emit DroposalTypeProposed(pendingDroposalTypeId, config);

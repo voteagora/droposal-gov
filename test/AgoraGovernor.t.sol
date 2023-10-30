@@ -8,13 +8,35 @@ import {NounsReceiver} from "./mocks/NounsReceiver.sol";
 import {IERC721Checkpointable} from "src/lib/openzeppelin/v1/GovernorVotesUpgradeable.sol";
 import {IGovernorUpgradeable} from "src/lib/openzeppelin/v1/GovernorUpgradeable.sol";
 import {IZoraCreator1155Factory} from "src/interfaces/IZoraCreator1155Factory.sol";
+import {IZoraCreator1155} from "src/interfaces/IZoraCreator1155.sol";
+import {IZoraCreator721} from "src/interfaces/IZoraCreator721.sol";
+import {IZoraMinter, SalesConfig} from "src/interfaces/IZoraMinter.sol";
 import {ISliceCore, Payee, SliceParams} from "src/interfaces/ISliceCore.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {
     DroposalParams, NFTType, ERC721Params, ERC1155Params, ERC1155TokenParams
 } from "src/structs/DroposalParams.sol";
+import {DroposalConfig} from "src/structs/DroposalConfig.sol";
+
+struct RoyaltyConfiguration {
+    uint32 royaltyMintSchedule;
+    uint32 royaltyBPS;
+    address royaltyRecipient;
+}
 
 contract AgoraGovernorTest is Test {
+    // IZoraCreator721
+    event CreatedDrop(address indexed creator, address indexed editionContractAddress, uint256 editionSize);
+    // IZoraCreator1155Factory
+    event SetupNewContract(
+        address indexed newContract,
+        address indexed creator,
+        address indexed defaultAdmin,
+        string contractURI,
+        string name,
+        RoyaltyConfiguration defaultRoyaltyConfiguration
+    );
+
     IERC721Checkpointable public constant nounsToken = IERC721Checkpointable(0x9C8fF314C9Bc7F6e59A9d9225Fb22946427eDC03);
     IGovernorUpgradeable public constant nounsGovernor =
         IGovernorUpgradeable(0x6f3E6272A167e8AcCb32072d08E0957F9c79223d);
@@ -28,6 +50,7 @@ contract AgoraGovernorTest is Test {
 
     AgoraNounsGovernorMock governor;
     address receiver;
+    uint256 droposalType = 0;
 
     function setUp() public {
         vm.createSelectFork(vm.envString("RPC_URL_MAINNET"), 18380477);
@@ -49,27 +72,127 @@ contract AgoraGovernorTest is Test {
         assertEq(governor.getDroposalType(1).editionSize, 3_000);
     }
 
-    function testDropose() public {
-        vm.prank(nouner);
-        governor.dropose(
-            DroposalParams({
-                droposalType: 0,
-                nftType: NFTType.ERC721,
-                nftCollection: address(0),
-                proposalDescription: "TestProp",
-                nftParams: abi.encode(
-                    ERC721Params({
-                        name: "Test721",
-                        symbol: "TST",
-                        royaltyBPS: 0,
-                        fundsRecipient: payable(address(1)),
-                        imageURI: "ipfs://Qm",
-                        animationURI: "",
-                        description: ""
-                    })
-                    )
+    function testDropose721() public {
+        vm.startPrank(nouner);
+        uint64 publicSaleStart = uint64(block.timestamp) + 15 days;
+        DroposalConfig memory config = governor.getDroposalType(droposalType);
+        DroposalParams memory droposalParams = DroposalParams({
+            droposalType: droposalType,
+            nftType: NFTType.ERC721,
+            nftCollection: address(0),
+            proposalDescription: "TestProp",
+            nftParams: abi.encode(
+                ERC721Params({
+                    name: "Test721",
+                    symbol: "TST",
+                    royaltyBPS: 0,
+                    fundsRecipient: payable(address(1)),
+                    imageURI: "ipfs://Qm",
+                    animationURI: "",
+                    description: ""
+                })
+                )
+        });
+
+        uint256 proposalId = governor.dropose(droposalParams);
+
+        (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) =
+            governor.encode721Data(publicSaleStart, droposalParams, config);
+
+        vm.expectEmit();
+        emit CreatedDrop({
+            creator: address(governor),
+            editionSize: config.editionSize,
+            editionContractAddress: 0xFF29146F27fc65e82E9c7072c86c40fb3835576D
+        });
+        governor.forceExecute(proposalId, targets, values, calldatas, keccak256("TestProp"));
+
+        vm.stopPrank();
+    }
+
+    function _assertDroposalCreated() internal {}
+
+    function testDropose1155() public {
+        vm.startPrank(nouner);
+
+        uint64 publicSaleStart = uint64(block.timestamp) + 15 days;
+        DroposalConfig memory config = governor.getDroposalType(droposalType);
+        DroposalParams memory droposalParams = DroposalParams({
+            droposalType: 0,
+            nftType: NFTType.ERC1155,
+            nftCollection: address(0),
+            proposalDescription: "TestProp",
+            nftParams: abi.encode(
+                ERC1155Params({
+                    name: "Test1155",
+                    contractURI: "contractUri",
+                    tokenParams: ERC1155TokenParams({royaltyBPS: 0, fundsRecipient: payable(address(1)), tokenURI: ""})
+                })
+                )
+        });
+
+        uint256 proposalId = governor.dropose(droposalParams);
+
+        (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) =
+            governor.encode1155Data(publicSaleStart, droposalParams, config);
+
+        vm.expectEmit();
+        emit SetupNewContract({
+            newContract: 0x1F0f671187C783f8DFaDDE3835683E0D1230AB79,
+            creator: address(governor),
+            defaultAdmin: nouner,
+            contractURI: "contractUri",
+            name: "Test1155",
+            defaultRoyaltyConfiguration: RoyaltyConfiguration({
+                royaltyMintSchedule: 0,
+                royaltyBPS: 0,
+                royaltyRecipient: nouner
             })
-        );
+        });
+        governor.forceExecute(proposalId, targets, values, calldatas, keccak256("TestProp"));
+
+        assertSalesConfig(0x1F0f671187C783f8DFaDDE3835683E0D1230AB79, 1, config);
+
+        vm.stopPrank();
+    }
+
+    function testDroposeExisting1155() public {
+        uint256 tokenId = 2;
+
+        address nftCollection = 0xf0f83a794906aE2ca97927AfaBc98d5855b046c7;
+        // Add governor the minter permission at `CONTRACT_BASE_ID` = 0
+        vm.prank(IZoraCreator1155(nftCollection).owner());
+        IZoraCreator1155(nftCollection).addPermission(0, address(governor), 2 ** 2);
+        // Add governor the minter permission at `tokenId`
+        vm.prank(IZoraCreator1155(nftCollection).owner());
+        IZoraCreator1155(nftCollection).addPermission(tokenId, address(governor), 2 ** 2);
+        // Add FIXED_PRICE_MINTER the minter permission at `tokenId`
+        vm.prank(IZoraCreator1155(nftCollection).owner());
+        IZoraCreator1155(nftCollection).addPermission(tokenId, FIXED_PRICE_MINTER, 2 ** 2);
+
+        vm.startPrank(nouner);
+        uint64 publicSaleStart = uint64(block.timestamp) + 15 days;
+        DroposalConfig memory config = governor.getDroposalType(droposalType);
+        DroposalParams memory droposalParams = DroposalParams({
+            droposalType: 0,
+            nftType: NFTType.ERC1155,
+            nftCollection: nftCollection,
+            proposalDescription: "TestProp",
+            nftParams: abi.encode(
+                ERC1155TokenParams({royaltyBPS: 0, fundsRecipient: payable(address(1)), tokenURI: "test"})
+                )
+        });
+
+        uint256 proposalId = governor.dropose(droposalParams);
+
+        (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) =
+            governor.encodeExisting1155Data(publicSaleStart, droposalParams, config);
+
+        governor.forceExecute(proposalId, targets, values, calldatas, keccak256("TestProp"));
+
+        assertSalesConfig(nftCollection, tokenId, config);
+
+        vm.stopPrank();
     }
 
     function testDroposeSepolia() public {
@@ -101,5 +224,21 @@ contract AgoraGovernorTest is Test {
                     )
             })
         );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                HELPERS
+    //////////////////////////////////////////////////////////////*/
+
+    function assertSalesConfig(address tokenContract, uint256 tokenId, DroposalConfig memory config) internal {
+        SalesConfig memory salesConfig = IZoraMinter(FIXED_PRICE_MINTER).sale(tokenContract, tokenId);
+
+        uint64 publicSaleStart = uint64(block.timestamp) + 15 days;
+
+        assertEq(salesConfig.saleStart, publicSaleStart);
+        assertEq(salesConfig.saleEnd, publicSaleStart + config.publicSaleDuration);
+        assertEq(salesConfig.maxTokensPerAddress, 0);
+        assertEq(salesConfig.pricePerToken, config.publicSalePrice);
+        assertEq(salesConfig.fundsRecipient, address(AgoraNounsGovernorMock(governor.fundsRecipient())));
     }
 }

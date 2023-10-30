@@ -22,6 +22,7 @@ contract AgoraNounsGovernorSepoliaMock is AgoraNounsGovernorSepolia {
 
     function encode721Data(uint64 publicSaleStart, DroposalParams memory droposalParams, DroposalConfig memory config)
         public
+        view
         returns (address[] memory targets, uint256[] memory values, bytes[] memory calldatas)
     {
         return _encode721Data(publicSaleStart, droposalParams, config);
@@ -29,6 +30,7 @@ contract AgoraNounsGovernorSepoliaMock is AgoraNounsGovernorSepolia {
 
     function encode1155Data(uint64 publicSaleStart, DroposalParams memory droposalParams, DroposalConfig memory config)
         public
+        view
         returns (address[] memory targets, uint256[] memory values, bytes[] memory calldatas)
     {
         return _encode1155Data(publicSaleStart, droposalParams, config);
@@ -38,7 +40,7 @@ contract AgoraNounsGovernorSepoliaMock is AgoraNounsGovernorSepolia {
         uint64 publicSaleStart,
         DroposalParams memory droposalParams,
         DroposalConfig memory config
-    ) public returns (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) {
+    ) public view returns (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) {
         return _encodeExisting1155Data(publicSaleStart, droposalParams, config);
     }
 

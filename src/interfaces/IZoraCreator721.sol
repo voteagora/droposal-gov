@@ -4,6 +4,8 @@ pragma solidity 0.8.19;
 import {IERC721Drop} from "zora-721/interfaces/IERC721Drop.sol";
 
 interface IZoraCreator721 {
+    event CreatedDrop(address indexed creator, address indexed editionContractAddress, uint256 editionSize);
+
     function createEdition(
         string memory name,
         string memory symbol,

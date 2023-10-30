@@ -12,6 +12,14 @@ struct RoyaltyConfiguration {
 }
 
 interface IZoraCreator1155 {
+    event SetupNewToken(uint256 indexed tokenId, address indexed sender, string newURI, uint256 maxSupply);
+
+    event ContractMetadataUpdated(address indexed updater, string uri, string name);
+    event Purchased(
+        address indexed sender, address indexed minter, uint256 indexed tokenId, uint256 quantity, uint256 value
+    );
+    event CreatorAttribution(bytes32 structHash, string domainName, string version, address creator, bytes signature);
+
     /// @notice Only allow minting one token id at time
     /// @dev Mint contract function that calls the underlying sales function for commands
     /// @param minter Address for the minter
@@ -61,4 +69,8 @@ interface IZoraCreator1155 {
     function isAdminOrRole(address user, uint256 tokenId, uint256 role) external view returns (bool);
 
     function nextTokenId() external view returns (uint256);
+
+    function owner() external view returns (address);
+
+    function setOwner(address newOwner) external;
 }

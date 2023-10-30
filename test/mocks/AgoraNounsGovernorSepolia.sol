@@ -168,6 +168,7 @@ contract AgoraNounsGovernorSepolia is
 
     function _encode721Data(uint64 publicSaleStart, DroposalParams memory droposalParams, DroposalConfig memory config)
         internal
+        view
         returns (address[] memory targets, uint256[] memory values, bytes[] memory calldatas)
     {
         (ERC721Params memory params) = abi.decode(droposalParams.nftParams, (ERC721Params));
@@ -205,6 +206,7 @@ contract AgoraNounsGovernorSepolia is
 
     function _encode1155Data(uint64 publicSaleStart, DroposalParams memory droposalParams, DroposalConfig memory config)
         internal
+        view
         returns (address[] memory targets, uint256[] memory values, bytes[] memory calldatas)
     {
         (ERC1155Params memory params) = abi.decode(droposalParams.nftParams, (ERC1155Params));
@@ -252,7 +254,7 @@ contract AgoraNounsGovernorSepolia is
         uint64 publicSaleStart,
         DroposalParams memory droposalParams,
         DroposalConfig memory config
-    ) internal returns (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) {
+    ) internal view returns (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) {
         (ERC1155TokenParams memory params) = abi.decode(droposalParams.nftParams, (ERC1155TokenParams));
 
         targets = new address[](3);
